@@ -70,8 +70,45 @@
         {% end %}
       {% end %}
     </optgroup>
-
+  {% if ntop.isPro() and isAdministrator() and (table.len(infrastructures) > 0) then %}  
+    <optgroup id="optInf" label="{{ i18n('infrastructure_dashboard.infrastructure') }}">
+    {% for k,v in pairs(infrastructures or {}) do %}
+      <option value="{{ v }}" href="#" data-content="{{ "<i class='fas fa-building'></i> "..k }}"> {{ v }}</option>
+    {% end %} 
+    </optgroup>
+  {% end %}
   </select>
 </li>
+
+
+{% -- Print the observation point dropdown %}
+{% if(observationPoints ~= nil) then %}
+&nbsp;
+
+{% for k, v in pairsByKeys(observationPoints, asc) do %}
+  <form id="switch_interface_form_observation_point_{{ k }}" method="POST" action="/?ifid={{ currentIfaceId }}&observationPointId={{ k }}" >
+    <input name="switch_interface" type="hidden" value="1" />
+    <input name="switch_observation_point" type="hidden" value="{{ k }}" />
+    <input name="csrf" type="hidden" value="{{ ntop.getRandomCSRFValue() }}" />
+  </form>
+{% end %}
+
+
+    <li class="nav-item d-none d-sm-flex align-items-center">
+     <select name="observationpoint-dropdown" id="observationpoint-dropdown" class="selectpicker" data-width="fit" data-live-search="true" data-live-search-placeholder="{{ i18n('search') }}" data-actions-box="true">
+
+    {% -- The Observationpoint optgroup %}
+      <optgroup label="{{ i18n('observationpoints') }}">
+     {% for k, v in pairsByKeys(observationPoints, asc) do %}
+          {% local selected = '' %}
+        {% if((observationPointId ~= nil) and (tostring(k) == tostring(observationPointId))) then selected = 'selected' end %}
+        <option value="{{ k }}" {{ selected }}>{{ getObsPointAlias(k, true) }}</option>
+     {% end %}
+      </optgroup>
+    </select>
+   </li>
+{% end %}
+
+
 
 <script type="text/javascript" src="{{ ntop.getHttpPrefix() }}/js/pages/components/ifaces-dropdown.js?{{ ntop.getStaticFileEpoch() }}"></script>

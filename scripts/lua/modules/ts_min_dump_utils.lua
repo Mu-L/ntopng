@@ -81,33 +81,37 @@ function ts_dump.subnet_update_rrds(when, ifstats, verbose)
         {ifid=ifstats.id, subnet=subnet,
         score=sstats["score"], scoreAsClient=sstats["score.as_client"], scoreAsServer=sstats["score.as_server"]}, when)
 
-    ts_utils.append("subnet:tcp_retransmissions",
-        {ifid=ifstats.id, subnet=subnet,
-        packets_ingress=sstats["tcpPacketStats.ingress"]["retransmissions"],
-        packets_egress=sstats["tcpPacketStats.egress"]["retransmissions"],
-        packets_inner=sstats["tcpPacketStats.inner"]["retransmissions"]}, when)
+    if not ifstats.isSampledTraffic then
+       ts_utils.append("subnet:tcp_retransmissions",
+		       {ifid=ifstats.id, subnet=subnet,
+			packets_ingress=sstats["tcpPacketStats.ingress"]["retransmissions"],
+			packets_egress=sstats["tcpPacketStats.egress"]["retransmissions"],
+			packets_inner=sstats["tcpPacketStats.inner"]["retransmissions"]}, when)
 
-    ts_utils.append("subnet:tcp_out_of_order",
-        {ifid=ifstats.id, subnet=subnet,
-        packets_ingress=sstats["tcpPacketStats.ingress"]["out_of_order"],
-        packets_egress=sstats["tcpPacketStats.egress"]["out_of_order"],
-        packets_inner=sstats["tcpPacketStats.inner"]["out_of_order"]}, when)
+       ts_utils.append("subnet:tcp_out_of_order",
+		       {ifid=ifstats.id, subnet=subnet,
+			packets_ingress=sstats["tcpPacketStats.ingress"]["out_of_order"],
+			packets_egress=sstats["tcpPacketStats.egress"]["out_of_order"],
+			packets_inner=sstats["tcpPacketStats.inner"]["out_of_order"]}, when)
 
-    ts_utils.append("subnet:tcp_lost",
-        {ifid=ifstats.id, subnet=subnet,
-        packets_ingress=sstats["tcpPacketStats.ingress"]["lost"],
-        packets_egress=sstats["tcpPacketStats.egress"]["lost"],
-        packets_inner=sstats["tcpPacketStats.inner"]["lost"]}, when)
+       ts_utils.append("subnet:tcp_lost",
+		       {ifid=ifstats.id, subnet=subnet,
+			packets_ingress=sstats["tcpPacketStats.ingress"]["lost"],
+			packets_egress=sstats["tcpPacketStats.egress"]["lost"],
+			packets_inner=sstats["tcpPacketStats.inner"]["lost"]}, when)
 
-    ts_utils.append("subnet:tcp_keep_alive",
-        {ifid=ifstats.id, subnet=subnet,
-        packets_ingress=sstats["tcpPacketStats.ingress"]["keep_alive"],
-        packets_egress=sstats["tcpPacketStats.egress"]["keep_alive"],
-        packets_inner=sstats["tcpPacketStats.inner"]["keep_alive"]}, when)
+       ts_utils.append("subnet:tcp_keep_alive",
+		       {ifid=ifstats.id, subnet=subnet,
+			packets_ingress=sstats["tcpPacketStats.ingress"]["keep_alive"],
+			packets_egress=sstats["tcpPacketStats.egress"]["keep_alive"],
+			packets_inner=sstats["tcpPacketStats.inner"]["keep_alive"]}, when)
+    end
 
-    ts_utils.append("subnet:engaged_alerts",
-        {ifid=ifstats.id, subnet=subnet,
-        alerts=sstats["engaged_alerts"]}, when)
+    if areAlertsEnabled() then
+       ts_utils.append("subnet:engaged_alerts",
+		       {ifid=ifstats.id, subnet=subnet,
+			alerts=sstats["engaged_alerts"]}, when)
+    end
   end
 end
 
@@ -118,14 +122,26 @@ function ts_dump.iface_update_general_stats(when, ifstats, verbose)
    ts_utils.append("iface:score", {ifid=ifstats.id, srv_score=ifstats.score.score_as_srv, cli_score=ifstats.score.score_as_cli}, when)
 
    -- General stats
-   ts_utils.append("iface:alerts_stats", {ifid=ifstats.id, engaged_alerts=ifstats.num_alerts_engaged, dropped_alerts=ifstats.num_dropped_alerts}, when)
-   ts_utils.append("iface:hosts", {ifid=ifstats.id, num_hosts=ifstats.stats.hosts}, when)
-   ts_utils.append("iface:local_hosts", {ifid=ifstats.id, num_hosts=ifstats.stats.local_hosts}, when)
-   ts_utils.append("iface:devices", {ifid=ifstats.id, num_devices=ifstats.stats.devices}, when)
    ts_utils.append("iface:flows", {ifid=ifstats.id, num_flows=ifstats.stats.flows}, when)
-   ts_utils.append("iface:http_hosts", {ifid=ifstats.id, num_hosts=ifstats.stats.http_hosts}, when)
    ts_utils.append("iface:alerted_flows", {ifid=ifstats.id, num_flows=ifstats.num_alerted_flows}, when)
    ts_utils.append("iface:new_flows", {ifid=ifstats.id, new_flows=ifstats.stats.new_flows}, when)
+
+   if not ifstats.isViewed then
+      -- Viewed interfaces don't have hosts, their hosts stay in the view
+      ts_utils.append("iface:hosts", {ifid=ifstats.id, num_hosts=ifstats.stats.hosts}, when)
+      ts_utils.append("iface:local_hosts", {ifid=ifstats.id, num_hosts=ifstats.stats.local_hosts}, when)
+      ts_utils.append("iface:http_hosts", {ifid=ifstats.id, num_hosts=ifstats.stats.http_hosts}, when)
+
+      if not ifstats.isView then
+	 ts_utils.append("iface:devices", {ifid=ifstats.id, num_devices=ifstats.stats.devices}, when)
+      end
+   end
+
+   -- Alert stats
+   if areAlertsEnabled() then
+      ts_utils.append("iface:engaged_alerts", {ifid=ifstats.id, engaged_alerts=ifstats.num_alerts_engaged}, when)
+      ts_utils.append("iface:dropped_alerts", {ifid=ifstats.id, dropped_alerts=ifstats.num_dropped_alerts}, when)
+   end
 end
 
 function ts_dump.iface_update_l4_stats(when, ifstats, verbose)
@@ -182,6 +198,15 @@ function ts_dump.profiles_update_stats(when, ifstats, verbose)
     ts_utils.append("profile:traffic", {ifid=ifstats.id, profile=pname, bytes=ptraffic}, when)
   end
 end
+
+function ts_dump.observation_points_update_stats_rrds(when, ifstats, verbose)
+  local observation_points = interface.getObservationPoints() or {}
+
+  for id, stats in pairs(observation_points) do
+    ts_utils.append("observation_point:flows",   {ifid=ifstats.id, observation_point_id=id, flows=stats["num_collected_flows"]}, when)
+    ts_utils.append("observation_point:traffic", {ifid=ifstats.id, observation_point_id=id, bytes=stats["total_flow_bytes"]}, when)
+  end
+end 
 
 -- ########################################################
 
@@ -340,7 +365,9 @@ end
 -- ########################################################
 
 function ts_dump.iface_update_anomalies(when, ifstats, verbose)
-   ts_utils.append("iface:hosts_anomalies", {ifid=ifstats.id, num_local_hosts_anomalies=ifstats.anomalies.num_local_hosts_anomalies, num_remote_hosts_anomalies=ifstats.anomalies.num_remote_hosts_anomalies}, when)
+   if not ifstats.isViewed then
+      ts_utils.append("iface:hosts_anomalies", {ifid=ifstats.id, num_local_hosts_anomalies=ifstats.anomalies.num_local_hosts_anomalies, num_remote_hosts_anomalies=ifstats.anomalies.num_remote_hosts_anomalies}, when)
+   end
 end
 
 -- ########################################################
@@ -370,7 +397,7 @@ function ts_dump.run_min_dump(_ifname, ifstats, config, when)
      ts_dump.iface_update_flow_dump_stats(when, ifstats, verbose)
   end
 
-  if not ifstats.has_seen_ebpf_events then
+  if not ifstats.has_seen_ebpf_events and not ifstats.isSampledTraffic then
      ts_dump.iface_update_tcp_flags(when, ifstats, verbose)
      ts_dump.iface_update_tcp_stats(when, ifstats, verbose)
   end
@@ -398,6 +425,10 @@ function ts_dump.run_min_dump(_ifname, ifstats, config, when)
      
      -- Save duration of periodic activities
      ts_dump.update_internals_periodic_activities_stats(when, ifstats, verbose)
+  end
+
+  if ntop.isPro() and config.observation_points_rrd_creation ~= "0" then
+    ts_dump.observation_points_update_stats_rrds(when, ifstats, verbose)
   end
 
   -- Save Profile stats every minute
@@ -428,11 +459,13 @@ function ts_dump.getConfig()
 
   config.interface_ndpi_timeseries_creation = ntop.getPref("ntopng.prefs.interface_ndpi_timeseries_creation")
   config.ndpi_flows_timeseries_creation = ntop.getPref("ntopng.prefs.ndpi_flows_rrd_creation")
+  config.observation_points_rrd_creation = ntop.getPref("ntopng.prefs.flow_device_port_rrd_creation")
   config.internals_rrd_creation = ntop.getPref("ntopng.prefs.internals_rrd_creation") == "1"
   config.is_dump_flows_enabled = ntop.getPrefs()["is_dump_flows_enabled"]
 
   -- Interface RRD creation is on, with per-protocol nDPI
   if isEmptyString(config.interface_ndpi_timeseries_creation) then config.interface_ndpi_timeseries_creation = "per_protocol" end
+  if isEmptyString(config.observation_points_rrd_creation)    then config.observation_points_rrd_creation = "0" end
 
   return config
 end

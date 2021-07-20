@@ -402,6 +402,14 @@ end
 
 -- ##############################################
 
+-- @brief returns the maximum number of pools that can be created
+function host_pools:get_max_num_pools()
+   local ntop_info = ntop.getInfo()
+   return ntop_info["constants.max_num_host_pools"]
+end
+
+-- ##############################################
+
 -- @param member a valid pool member
 -- @return The pool_id found for the currently selected host.
 --         `member` here is IGNORED: argument is just kept to
@@ -453,7 +461,7 @@ function host_pools:hostpool2record(ifid, pool_id, pool)
     record["column_breakdown"] =
         "<div class='progress'><div class='progress-bar bg-warning' style='width: " ..
             sent2rcvd ..
-            "%;'>Sent</div><div class='progress-bar bg-info' style='width: " ..
+            "%;'>Sent</div><div class='progress-bar bg-success' style='width: " ..
             (100 - sent2rcvd) .. "%;'>Rcvd</div></div>"
 
     if (throughput_type == "pps") then

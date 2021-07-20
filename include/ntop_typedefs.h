@@ -134,6 +134,8 @@ typedef enum {
   location_local_only,
   location_remote_only,
   location_broadcast_domain_only,
+  location_private_only, /* Only 192.168.0.0/16 and other private */
+  location_public_only,  /* Only non-private */
   location_all,
 } LocationPolicy;
 
@@ -194,10 +196,12 @@ typedef enum {
   NOTE: Keep in sync with Lua alert_roles.lua
  */
 typedef enum {
-  alert_role_any = 0,
+  alert_role_is_any = 0,
   alert_role_is_attacker = 1,
   alert_role_is_victim = 2,
-  alert_role_is_both = 3,
+  alert_role_is_client = 3,
+  alert_role_is_server = 4,
+  alert_role_is_none = 5,
 } AlertRole;
 
 /*
@@ -216,6 +220,8 @@ typedef enum {
   alert_entity_am_host             =  8,
   alert_entity_system              =  9,
   alert_entity_test                = 10,
+  alert_entity_asn                 = 11,
+  alert_entity_l7                  = 12,
 
   /* Add new entities above ^ and do not exceed alert_entity_other */
   alert_entity_other               = 15,
@@ -349,6 +355,10 @@ typedef struct zmq_remote_stats {
   u_int32_t remote_lifetime_timeout, remote_idle_timeout, remote_collected_lifetime_timeout;
   u_int32_t export_queue_full, too_many_flows, elk_flow_drops,
     sflow_pkt_sample_drops, flow_collection_drops, flow_collection_udp_socket_drops;
+  struct {
+    u_int64_t nf_ipfix_flows;
+    u_int64_t sflow_samples;
+  } flow_collection;
 } ZMQ_RemoteStats;
 
 typedef struct zmq_template {
@@ -414,8 +424,8 @@ typedef enum {
   flow_alert_internals                        = 14,
   flow_alert_potentially_dangerous            = 15,
   flow_alert_remote_to_remote                 = 16,
-  flow_alert_suspicious_tcp_probing           = 17,
-  flow_alert_suspicious_tcp_syn_probing       = 18,
+  flow_alert_suspicious_tcp_probing           = 17, /* No longer used, can be recycled */
+  flow_alert_suspicious_tcp_syn_probing       = 18, /* No longer used, can be recycled */
   flow_alert_tcp_connection_issues            = 19, /* No longer used, can be recycled */
   flow_alert_tcp_connection_refused           = 20,
   flow_alert_tcp_severe_connection_issues     = 21, /* No longer used, merged with flow_alert_tcp_connection_issues */
@@ -456,6 +466,8 @@ typedef enum {
   flow_alert_tcp_no_data_exchanged            = 56,
   flow_alert_remote_access                    = 57,
   flow_alert_lateral_movement                 = 58,
+  flow_alert_periodicity_changed              = 59,
+  flow_alert_ndpi_tls_cert_validity_too_long  = 60,
   
   MAX_DEFINED_FLOW_ALERT_TYPE, /* Leave it as last member */
 
@@ -596,6 +608,7 @@ typedef enum {
 } sortField;
 
 typedef struct {
+  u_int32_t samplesGenerated; /* The sequence number of this counter sample */
   u_int32_t deviceIP, ifIndex, ifType, ifSpeed;
   char *ifName;
   bool ifFullDuplex, ifAdminStatus, ifOperStatus, ifPromiscuousMode;
@@ -790,7 +803,8 @@ struct ntopngLuaContext {
   NetworkStats *network;
   Flow *flow;
   bool localuser;
-
+  u_int16_t observationPointId;
+  
   /* Capabilities bitmap */
   u_int64_t capabilities;
 

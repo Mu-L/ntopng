@@ -57,6 +57,7 @@ Ntop::Ntop(char *appName) {
   extract = new (std::nothrow) TimelineExtract();
   pa      = new (std::nothrow) PeriodicActivities();
   address = new (std::nothrow) AddressResolution();
+  offline = false;
   custom_ndpi_protos = NULL;
   prefs = NULL, redis = NULL;
 #ifndef HAVE_NEDGE
@@ -79,8 +80,10 @@ Ntop::Ntop(char *appName) {
   host_checks_loader = NULL;
 
   /* Flow alerts exclusions */
+#ifdef NTOPNG_PRO
   alertExclusionsReloadInProgress = true;
   alert_exclusions = alert_exclusions_shadow = NULL;
+#endif
 
   /* Host Pools reload - Interfaces initialize their pools inside the constructor */
   hostPoolsReloadInProgress = false;
@@ -312,6 +315,8 @@ Ntop::~Ntop() {
 
 #ifdef NTOPNG_PRO
   if(pro) delete pro;
+  if(alert_exclusions)          delete alert_exclusions;
+  if(alert_exclusions_shadow)   delete alert_exclusions_shadow;
 #endif
 
   if(resolvedHostsBloom) delete resolvedHostsBloom;
@@ -330,8 +335,6 @@ Ntop::~Ntop() {
 
   if(flow_checks_loader)     delete flow_checks_loader;
   if(host_checks_loader)     delete host_checks_loader;
-  if(alert_exclusions)          delete alert_exclusions;
-  if(alert_exclusions_shadow)   delete alert_exclusions_shadow;
 
 #ifdef __linux__
   if(inotify_fd > 0)  close(inotify_fd);
@@ -1220,7 +1223,7 @@ bool Ntop::isUserAdministrator(lua_State* vm) {
   } else if(HTTPserver::authorized_localhost_user_login(conn))
     return(true); /* login disabled from localhost, everyone's connecting from localhost is an admin */
 
-  if((username = getLuaVMUserdata(vm,user)) == NULL) {
+  if((username = getLuaVMUserdata(vm, user)) == NULL) {
     // ntop->getTrace()->traceEvent(TRACE_WARNING, "%s(%s): NO", __FUNCTION__, "???");
     return(false); /* Unknown */
   }
@@ -2175,6 +2178,9 @@ bool Ntop::addUser(char *username, char *full_name, char *password, char *host_r
   snprintf(key, sizeof(key), CONST_STR_USER_NETS, username);
   ntop->getRedis()->set(key, allowed_networks, 0);
 
+  snprintf(key, sizeof(key), CONST_STR_USER_THEME, username);
+  ntop->getRedis()->set(key, "", 0);
+
   if(language && language[0] != '\0') {
     snprintf(key, sizeof(key), CONST_STR_USER_LANGUAGE, username);
     ntop->getRedis()->set(key, language, 0);
@@ -2272,6 +2278,9 @@ bool Ntop::deleteUser(char *username) {
   ntop->getRedis()->del(key);
 
   snprintf(key, sizeof(key), CONST_STR_USER_HOST_POOL_ID, username);
+  ntop->getRedis()->del(key);
+
+  snprintf(key, sizeof(key), CONST_STR_USER_THEME, username);
   ntop->getRedis()->del(key);
 
   /*
@@ -2669,6 +2678,7 @@ void Ntop::checkReloadHostPools() {
 /* ******************************************* */
 
 void Ntop::checkReloadAlertExclusions() {
+#ifdef NTOPNG_PRO
   if(alert_exclusions_shadow) { /* Dispose old memory if necessary */
     delete alert_exclusions_shadow;
     alert_exclusions_shadow = NULL;
@@ -2684,6 +2694,7 @@ void Ntop::checkReloadAlertExclusions() {
     if(!alert_exclusions)
       ntop->getTrace()->traceEvent(TRACE_ERROR, "Unable to allocate memory for control groups.");
   }
+#endif
 }
 
 /* ******************************************* */
@@ -3361,6 +3372,24 @@ void Ntop::addLocalNetworkList(const char *rule) {
     if(!addLocalNetwork(net)) return;
     net = strtok_r(NULL, ",", &tmp);
   }
+}
+
+/* ******************************************* */
+
+bool Ntop::luaFlowCheckInfo(lua_State *vm, std::string check_name) const {
+  FlowChecksLoader *fcl = flow_checks_loader;
+  if(fcl) return fcl->luaCheckInfo(vm, check_name);
+
+  return false;
+}
+
+/* ******************************************* */
+
+bool Ntop::luaHostCheckInfo(lua_State *vm, std::string check_name) const {
+  HostChecksLoader *hcl = host_checks_loader;
+  if(hcl) return hcl->luaCheckInfo(vm, check_name);
+
+  return false;
 }
 
 /* ******************************************* */

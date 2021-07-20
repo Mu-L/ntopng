@@ -322,7 +322,7 @@ char * Mac::getDHCPName(char * const buf, ssize_t buf_size) {
     m.unlock(__FILE__, __LINE__);
   }
 
-  return buf;
+  return Utils::stringtolower(buf);
 }
 
 /* *************************************** */
@@ -393,7 +393,7 @@ void Mac::inlineSetSSID(const char * const s) {
 /* *************************************** */
 
 void Mac::inlineSetDHCPName(const char * const dhcp_name) {
-  if(!names.dhcp && dhcp_name && (names.dhcp = strdup(dhcp_name)))
+  if(!names.dhcp && dhcp_name && (names.dhcp = Utils::toLowerResolvedNames(dhcp_name)))
     ;
 }
 

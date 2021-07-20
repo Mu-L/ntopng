@@ -60,7 +60,7 @@ end
 --@brief Performs a query for the top device address by alert count
 function mac_alert_store:top_address_historical()
    -- Preserve all the filters currently set
-   local where_clause = table.concat(self._where, " AND ")
+   local where_clause = self:build_where_clause()
 
    local q = string.format("SELECT address, count(*) count FROM %s WHERE %s GROUP BY address ORDER BY count DESC LIMIT %u",
 			   self._table_name, where_clause, self._top_limit)
@@ -93,6 +93,7 @@ local RNAME = {
    ADDRESS = { name = "address", export = true},
    DEVICE_TYPE = { name = "device_type", export = true},
    NAME = { name = "name", export = true},
+   DESCRIPTION = { name = "description", export = true},
    MSG = { name = "msg", export = true, elements = {"name", "value", "description"}}
 }
 
@@ -106,6 +107,7 @@ function mac_alert_store:format_record(value, no_html)
 
    local alert_info = alert_utils.getAlertInfo(value)
    local alert_name = alert_consts.alertTypeLabel(tonumber(value["alert_id"]), no_html, alert_entities.mac.entity_id)
+   local alert_fullname = alert_consts.alertTypeLabel(tonumber(value["alert_id"]), true, alert_entities.mac.entity_id)
    local msg = alert_utils.formatAlertMessage(ifid, value, alert_info)
 
    record[RNAME.ADDRESS.name] = value["address"]
@@ -124,8 +126,11 @@ function mac_alert_store:format_record(value, no_html)
       msg = noHtml(msg)
    end
 
+   record[RNAME.DESCRIPTION.name] = msg
+
    record[RNAME.MSG.name] = {
      name = noHtml(alert_name),
+     fullname = alert_fullname,
      value = tonumber(value["alert_id"]),
      description = msg,
      configset_ref = alert_utils.getConfigsetAlertLink(alert_info)

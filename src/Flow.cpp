@@ -33,7 +33,8 @@ const ndpi_protocol Flow::ndpiUnknownProtocol = { NDPI_PROTOCOL_UNKNOWN,
 /* *************************************** */
 
 Flow::Flow(NetworkInterface *_iface,
-	   VLANid _vlanId, u_int8_t _protocol,
+	   VLANid _vlanId, u_int16_t _observation_point_id,
+	   u_int8_t _protocol,
 	   Mac *_cli_mac, IpAddress *_cli_ip, u_int16_t _cli_port,
 	   Mac *_srv_mac, IpAddress *_srv_ip, u_int16_t _srv_port,
 	   const ICMPinfo * const _icmp_info,
@@ -41,6 +42,7 @@ Flow::Flow(NetworkInterface *_iface,
   periodic_stats_update_partial = NULL;
   viewFlowStats = NULL;
   vlanId = _vlanId, protocol = _protocol, cli_port = _cli_port, srv_port = _srv_port;
+  flow_device.observation_point_id = _observation_point_id;  
   cli_host = srv_host = NULL;
   cli_ip_addr = srv_ip_addr = NULL;
   good_tls_hs = true, flow_dropped_counts_increased = false, vrfId = 0;
@@ -56,7 +58,8 @@ Flow::Flow(NetworkInterface *_iface,
   suspicious_dga_domain = NULL;
   src2dst_tcp_zero_window = dst2src_tcp_zero_window = 0;
   swap_done = swap_requested = false;
-
+  flowCreationTime = iface->getTimeLastPktRcvd();
+  
 #ifdef HAVE_NEDGE
   last_conntrack_update = 0;
   marker = MARKER_NO_ACTION;
@@ -91,7 +94,7 @@ Flow::Flow(NetworkInterface *_iface,
   flow_score = 0;
 
   PROFILING_SUB_SECTION_ENTER(iface, "Flow::Flow: iface->findFlowHosts", 7);
-  iface->findFlowHosts(_vlanId, _cli_mac, _cli_ip, &cli_host, _srv_mac, _srv_ip, &srv_host);
+  iface->findFlowHosts(_vlanId, _observation_point_id, _cli_mac, _cli_ip, &cli_host, _srv_mac, _srv_ip, &srv_host);
   PROFILING_SUB_SECTION_EXIT(iface, 7);
 
   if(cli_host) {
@@ -132,7 +135,7 @@ Flow::Flow(NetworkInterface *_iface,
   memset(&custom_app, 0, sizeof(custom_app));
 
 #ifdef NTOPNG_PRO
-  lateral_movement = false;
+  lateral_movement = periodicity_changed = false;
   HostPools *hp = iface->getHostPools();
 
   routing_table_id = DEFAULT_ROUTING_TABLE_ID;
@@ -641,10 +644,9 @@ void Flow::processExtraDissectedInformation() {
 
       break;
     }
-  }
 
-  if(hasRisk(NDPI_SUSPICIOUS_DGA_DOMAIN) && !suspicious_dga_domain)
-    suspicious_dga_domain = strdup(getFlowInfo(NULL, 0));
+    updateSuspiciousDGADomain();
+  }
 
 #if defined(NTOPNG_PRO) && !defined(HAVE_NEDGE)
   getInterface()->updateFlowPeriodicity(this);
@@ -1873,7 +1875,8 @@ void Flow::update_pools_stats(NetworkInterface *iface,
 
 bool Flow::equal(const IpAddress *_cli_ip, const IpAddress *_srv_ip,
 		 u_int16_t _cli_port, u_int16_t _srv_port,
-		 VLANid _vlanId, u_int8_t _protocol,
+		 VLANid _vlanId, u_int16_t _observation_point_id,
+		 u_int8_t _protocol,
 		 const ICMPinfo * const _icmp_info,
 		 bool *src2srv_direction) const {
   const IpAddress *cli_ip = get_cli_ip_addr(), *srv_ip = get_srv_ip_addr();
@@ -1887,7 +1890,15 @@ bool Flow::equal(const IpAddress *_cli_ip, const IpAddress *_srv_ip,
 			       _srv_ip->print(buf4, sizeof(buf4)));
 #endif
 
-  if(_vlanId != vlanId)
+  if((get_vlan_id() != _vlanId)
+#ifdef MAKE_OBSERVATION_POINT_KEY
+     /*
+       Uncomment the line below if you want the same host
+       seen from various observation points, to be considered
+       a unique host */
+     || (get_observation_point_id() != _observation_point_id)
+#endif
+    )
     return(false);
 
   if(_protocol != protocol)
@@ -2021,8 +2032,9 @@ void Flow::lua(lua_State* vm, AddressTree * ptree,
 
     if(vrfId) lua_push_uint64_table_entry(vm, "vrfId", vrfId);
 
-    lua_push_uint32_table_entry(vm, "vlan", filterVLANid(get_vlan_id()));
-    lua_push_uint32_table_entry(vm, "observation_domain_id", filterObservationDomainId(get_vlan_id()));
+    /* See VLANAddressTree.h for details */
+    lua_push_uint32_table_entry(vm, "vlan", get_vlan_id());
+    lua_push_uint32_table_entry(vm, "observation_point_id", get_observation_point_id());
 
     if(srcAS)
       lua_push_int32_table_entry(vm, "src_as", srcAS);
@@ -2317,6 +2329,10 @@ bool Flow::hasRisks() const {
 u_int32_t Flow::key() {
   u_int32_t k = cli_port + srv_port + vlanId + protocol;
 
+#ifdef MAKE_OBSERVATION_POINT_KEY
+  k += get_observation_point_id();
+#endif
+  
   if(get_cli_ip_addr()) k += get_cli_ip_addr()->key();
   if(get_srv_ip_addr()) k += get_srv_ip_addr()->key();
   if(icmp_info) k += icmp_info->key();
@@ -2328,9 +2344,13 @@ u_int32_t Flow::key() {
 
 u_int32_t Flow::key(Host *_cli, u_int16_t _cli_port,
 		    Host *_srv, u_int16_t _srv_port,
-		    VLANid _vlan_id,
+		    VLANid _vlan_id, u_int16_t _observation_point_id,
 		    u_int16_t _protocol) {
   u_int32_t k = _cli_port + _srv_port + _vlan_id + _protocol;
+  
+#ifdef MAKE_OBSERVATION_POINT_KEY
+  k += _observation_point_id;
+#endif
 
   if(_cli) k += _cli -> key();
   if(_srv) k += _srv -> key();
@@ -2352,7 +2372,7 @@ u_int Flow::get_hash_entry_id() const {
 
 /* *************************************** */
 
-bool Flow::is_hash_entry_state_idle_transition_ready() const {
+bool Flow::is_hash_entry_state_idle_transition_ready() {
   bool ret = false;
 
 #ifdef EXPIRE_FLOWS_IMMEDIATELY
@@ -2400,6 +2420,14 @@ bool Flow::is_hash_entry_state_idle_transition_ready() const {
   if(ret)
     ntop->getTrace()->traceEvent(TRACE_NORMAL, "[%s] Idle flow found", iface->get_name());
 #endif
+
+  if(ret && ((iface->getTimeLastPktRcvd()-flowCreationTime) < 10 /* sec */)) {
+    /*
+      Trick to keep flows a minimum amount of time in memory
+      and thus avoid quick purging 
+    */
+    ret = false;
+  }
 
   return(ret);
 }
@@ -2780,7 +2808,13 @@ void Flow::alert2JSON(FlowAlert *alert, ndpi_serializer *s) {
   u_char community_id[200];
   time_t now = time(NULL);
 
-  ndpi_serialize_string_int32(s, "ifid", iface->get_id());
+  /*
+    If the interface is viewed, the id of the view interface is specified as ifid. This ensures
+    flow alerts of any viewed interface end up in the view interface, thus giving the user a single point
+    where to look at all the troubles.
+   */
+  ndpi_serialize_string_int32(s, "ifid", iface->isViewed() ? iface->viewedBy()->get_id() : iface->get_id());
+
   ndpi_serialize_string_string(s, "action", "store");
   ndpi_serialize_string_int64(s, "first_seen", get_first_seen());
   ndpi_serialize_string_int32(s, "score", getScore());
@@ -2799,8 +2833,9 @@ void Flow::alert2JSON(FlowAlert *alert, ndpi_serializer *s) {
   // flows don't have any pool for now
   ndpi_serialize_string_int32(s, "pool_id", NO_HOST_POOL_ID);
 
-  ndpi_serialize_string_int32(s, "vlan_id", filterVLANid(get_vlan_id()));
-  ndpi_serialize_string_int32(s, "observation_domain_id", filterObservationDomainId(get_vlan_id()));
+  /* See VLANAddressTree.h for details */
+  ndpi_serialize_string_int32(s, "vlan_id", get_vlan_id());
+  ndpi_serialize_string_int32(s, "observation_point_id", get_observation_point_id());
   
   ndpi_serialize_string_int32(s, "proto", get_protocol());
 
@@ -2824,6 +2859,8 @@ void Flow::alert2JSON(FlowAlert *alert, ndpi_serializer *s) {
   ndpi_serialize_string_int64(s, "cli2srv_packets", get_packets_cli2srv());
   ndpi_serialize_string_int64(s, "srv2cli_bytes", get_bytes_srv2cli());
   ndpi_serialize_string_int64(s, "srv2cli_packets", get_packets_srv2cli());
+
+  ndpi_serialize_string_int32(s, "ip_version", get_cli_ip_addr()->getVersion());
 
   ndpi_serialize_string_string(s, "cli_ip", get_cli_ip_addr()->print(buf, sizeof(buf)));
   ndpi_serialize_string_boolean(s, "cli_blacklisted", isBlacklistedClient());
@@ -3193,7 +3230,7 @@ bool Flow::enqueueAlertToRecipients(FlowAlert *alert) {
 				alert_entity_flow /* Flow recipients */);
 
   if(!rv)
-    getInterface()->incNumDroppedAlerts(1);
+    getInterface()->incNumDroppedAlerts(alert_entity_flow);
 
   ndpi_term_serializer(&flow_json);
 
@@ -3983,6 +4020,13 @@ void Flow::updateHTTP(ParsedFlow *zflow) {
 
 /* *************************************** */
 
+void Flow::updateSuspiciousDGADomain() {
+  if(hasRisk(NDPI_SUSPICIOUS_DGA_DOMAIN) && !suspicious_dga_domain)
+    suspicious_dga_domain = strdup(getFlowInfo(NULL, 0));
+}
+
+/* *************************************** */
+
 void Flow::setHTTPMethod(ndpi_http_method m) {
   if(protos.http.last_method == NDPI_HTTP_METHOD_UNKNOWN)
     protos.http.last_method = m;
@@ -4594,7 +4638,6 @@ bool Flow::isTiny() const {
 void Flow::setPacketsBytes(time_t now, u_int32_t s2d_pkts, u_int32_t d2s_pkts,
 			   u_int64_t s2d_bytes, u_int64_t d2s_bytes) {
   u_int16_t eth_proto = ETHERTYPE_IP;
-  u_int overhead = 0;
   bool nf_existing_flow;
 
   /* netfilter (depending on configured timeouts) could expire a flow before than
@@ -4630,20 +4673,18 @@ void Flow::setPacketsBytes(time_t now, u_int32_t s2d_pkts, u_int32_t d2s_pkts,
   */
   last_conntrack_update = now;
 
-  iface->_incStats(isIngress2EgressDirection(), now, eth_proto,
-		   getStatsProtocol(), get_protocol_category(),
-		   protocol,
-		   nf_existing_flow ? s2d_bytes - get_bytes_cli2srv() : s2d_bytes,
-		   nf_existing_flow ? s2d_pkts - get_packets_cli2srv() : s2d_pkts,
-		   overhead);
+  static_cast<NetfilterInterface*>(iface)->incStatsConntrack(isIngress2EgressDirection(), now, eth_proto,
+							     getStatsProtocol(), get_protocol_category(),
+							     protocol,
+							     nf_existing_flow ? s2d_bytes - get_bytes_cli2srv() : s2d_bytes,
+							     nf_existing_flow ? s2d_pkts - get_packets_cli2srv() : s2d_pkts);
 
-  iface->_incStats(!isIngress2EgressDirection(), now, eth_proto,
-		   getStatsProtocol(), get_protocol_category(),
-		   protocol,
-		   nf_existing_flow ? d2s_bytes - get_bytes_srv2cli() : d2s_bytes,
-		   nf_existing_flow ? d2s_pkts - get_packets_srv2cli() : d2s_pkts,
-		   overhead);
-
+  static_cast<NetfilterInterface*>(iface)->incStatsConntrack(!isIngress2EgressDirection(), now, eth_proto,
+							     getStatsProtocol(), get_protocol_category(),
+							     protocol,
+							     nf_existing_flow ? d2s_bytes - get_bytes_srv2cli() : d2s_bytes,
+							     nf_existing_flow ? d2s_pkts - get_packets_srv2cli() : d2s_pkts);
+  
   if(nf_existing_flow) {
     stats.setStats(true, s2d_pkts, s2d_bytes, 0);
     stats.setStats(false, d2s_pkts, d2s_bytes, 0);

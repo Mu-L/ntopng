@@ -233,12 +233,16 @@ using namespace std;
 #include "NetworkInterfaceAlertableEntity.h"
 #include "NetworkStatsAlertableEntity.h"
 #include "ExternalAlertableEntity.h"
+#include "BehaviouralCounter.h"
+
+#ifdef NTOPNG_PRO
+#include "AnalysisBehavior.h"
+#endif
+
 #include "nDPIStats.h"
 #include "InterarrivalStats.h"
 #include "FlowStats.h"
-#include "BehaviouralCounter.h"
 #ifdef NTOPNG_PRO
-#include "AnalysisBehavior.h"
 #include "CustomAppMaps.h"
 #include "CustomAppStats.h"
 #endif
@@ -258,6 +262,7 @@ using namespace std;
 #include "Profile.h"
 #include "Profiles.h"
 #include "CountMinSketch.h"
+#include "AlertExclusions.h"
 #ifndef HAVE_NEDGE
 #include "FlowProfile.h"
 #include "FlowProfiles.h"
@@ -271,7 +276,6 @@ using namespace std;
 #include "LdapAuthenticator.h"
 #endif
 #endif
-#include "AlertExclusions.h"
 #include "HostPoolStats.h"
 #include "HostPools.h"
 #include "Fingerprint.h"
@@ -337,6 +341,7 @@ using namespace std;
 #include "ServiceMap.h"
 #include "PeriodicityMap.h"
 #endif
+#include "ObservationPointIdTrafficStats.h"
 #include "NetworkInterface.h"
 #ifndef HAVE_NEDGE
 #include "PcapInterface.h"
@@ -420,6 +425,7 @@ using namespace std;
 #include "HTTPserver.h"
 #include "Paginator.h"
 #include "FlowAlert.h"
+#include "Check.h"
 #include "FlowCheck.h"
 #include "HostAlert.h"
 #include "HostCheck.h"

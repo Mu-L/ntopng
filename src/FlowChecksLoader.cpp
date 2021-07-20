@@ -109,8 +109,10 @@ void FlowChecksLoader::registerChecks() {
   if((fcb = new ExternalAlertCheckPro()))                       registerCheck(fcb);
   if((fcb = new InvalidDNSQuery()))                             registerCheck(fcb);
   if((fcb = new LateralMovement()))                             registerCheck(fcb);
+  if((fcb = new PeriodicityChanged()))                          registerCheck(fcb);
   if((fcb = new LongLivedFlow()))                               registerCheck(fcb);
   if((fcb = new TCPConnectionRefused()))                        registerCheck(fcb);
+  if((fcb = new FlowRiskTLSCertValidityTooLong()))              registerCheck(fcb);
   if((fcb = new FlowRiskTLSCertificateExpired()))               registerCheck(fcb);
   if((fcb = new FlowRiskTLSCertificateMismatch()))              registerCheck(fcb);
   if((fcb = new FlowRiskTLSOldProtocolVersion()))               registerCheck(fcb);
@@ -188,35 +190,41 @@ void FlowChecksLoader::loadConfiguration() {
       if(cb_all.find(check_key) != cb_all.end()) {
 	FlowCheck *cb = cb_all[check_key];
 
+	if(!cb->isCheckCompatibleWithEdition()) {
+	  ntop->getTrace()->traceEvent(TRACE_INFO, "Check not compatible with current edition [check: %s]", check_key);
+	  goto next_object;
+	}
+
 	if(json_object_object_get_ex(json_hook_all, "enabled", &json_enabled))
 	  enabled = json_object_get_boolean(json_enabled);
 	else
 	  enabled = false;
 
-	if(enabled && cb->isCheckCompatibleWithEdition()) {
-	  /* Script enabled */
-	  if(json_object_object_get_ex(json_hook_all, "script_conf", &json_script_conf)) {
-	    if(cb_all.find(check_key) != cb_all.end()) {
-	      FlowCheck *cb = cb_all[check_key];
+	if(!enabled) {
+	  ntop->getTrace()->traceEvent(TRACE_INFO, "Skipping check not enabled [check: %s]", check_key);
+	  goto next_object;
+	}
 
-	      if(cb->loadConfiguration(json_script_conf)) {
-		ntop->getTrace()->traceEvent(TRACE_INFO, "Successfully enabled check %s", check_key);
-	      } else {
-		ntop->getTrace()->traceEvent(TRACE_WARNING, "Error while loading check %s configuration",
-					     check_key);
-	      }
-
-	      cb->enable();
-	      cb->scriptEnable(); 
-	    }
+	/* Script enabled */
+	if(json_object_object_get_ex(json_hook_all, "script_conf", &json_script_conf)) {
+	  if(cb->loadConfiguration(json_script_conf)) {
+	    ntop->getTrace()->traceEvent(TRACE_INFO, "Successfully enabled check %s", check_key);
+	  } else {
+	    ntop->getTrace()->traceEvent(TRACE_WARNING, "Error while loading check %s configuration",
+					 check_key);
 	  }
+
+	  cb->enable();
+	  cb->scriptEnable(); 
 	} else {
 	  /* Script disabled */
 	  cb->scriptDisable(); 
 	}
-      }
+      }	else
+	ntop->getTrace()->traceEvent(TRACE_INFO, "Unable to find flow check %s", check_key);
     }
 
+  next_object:
     /* Move to the next element */
     json_object_iter_next(&it);
   } /* while */
@@ -257,4 +265,23 @@ std::list<FlowCheck*>* FlowChecksLoader::getChecks(NetworkInterface *iface, Flow
   }
 
   return(l);
+}
+
+/* **************************************************** */
+
+bool FlowChecksLoader::luaCheckInfo(lua_State* vm, std::string check_name) const {
+  std::map<std::string, FlowCheck*>::const_iterator it = cb_all.find(check_name);
+
+  if(it == cb_all.end())
+    return false;
+
+  lua_newtable(vm);
+  /*
+    Following keys are compatible and interoperable with Lua plugins as found under plugins_utils.lua
+    inside plugin metadata Lua table
+   */
+  lua_push_str_table_entry(vm, "edition", Utils::edition2name(it->second->getEdition()));
+  lua_push_str_table_entry(vm, "key", it->second->getName().c_str());
+
+  return true;
 }

@@ -20,7 +20,6 @@ local perPage     = _GET["perPage"]
 local sortColumn  = _GET["sortColumn"]
 local sortOrder   = _GET["sortOrder"]
 local protocol    = _GET["protocol"]
-local long_names  = _GET["long_names"]
 local custom_column = _GET["custom_column"]
 local traffic_type = _GET["traffic_type"]
 
@@ -55,16 +54,6 @@ end
 
 -- Get from redis the throughput type bps or pps
 local throughput_type = getThroughputType()
-
-if(long_names == nil) then
-   long_names = false
-else
-   if(long_names == "1") then
-      long_names = true
-   else
-      long_names = false
-   end
-end
 
 local sortPrefs = "hosts"
 
@@ -267,44 +256,16 @@ for _key, _value in pairsByKeys(vals, funct) do
       record["column_url"] = url
    end
 
-   if(value["name"] == nil) then
-      local hinfo = hostkey2hostinfo(key)
-      value["name"] = hostinfo2label(hinfo)
-   end
-
-   if(value["name"] == "") then
-      value["name"] = key
-   end
-
-   local column_name
-   local is_short = false
-
-   -- Visualize both the MDNS/DHCP name from C and (possibly) the host label
-   if(long_names) then
-      column_name = value["name"]
-   else
-      column_name = value["name"]
-
-      if not isIPv4(column_name) and not isIPv6(column_name) then
-         column_name = shortenString(column_name, 24)
+   local column_name = ''
+   if host then
+      if host["name"] then
+	 column_name = shortenString(host["name"])
       end
 
-      is_short = true
-   end
-
-   if(value["ip"] ~= nil) then
-      local label = hostinfo2label(value)
-
-      if label ~= value["ip"] then
-	 if(is_short == true) then
-	    if(value["name"] ~= label) then
-	       column_name = column_name .. " ["..shortenString(label, 24).."]"
-	    end
-	 else
-	    if column_name ~= label then
-	       column_name = column_name .. " ["..shortenString(label, 24).."]"
-	    end
-	 end
+      -- This is the label as set-up by the user
+      local alt_name = getHostAltName(host["ip"])
+      if not isEmptyString(alt_name) and alt_name ~= column_name then
+	 column_name = string.format("%s [%s]", column_name, shortenString(alt_name))
       end
    end
 
@@ -312,7 +273,7 @@ for _key, _value in pairsByKeys(vals, funct) do
       column_name = column_name .. " <i class='fas fa-hourglass' title='"..i18n("hosts_stats.blocking_traffic_policy_popup_msg").."'></i>"
    end
 
-   if(column_name == host.ip) then
+   if(host and (column_name == host.ip)) then
       record["column_name"] = ""
    else
       record["column_name"] = column_name
@@ -348,7 +309,7 @@ for _key, _value in pairsByKeys(vals, funct) do
       record["column_thpt"] = "0 "..throughput_type
    end
 
-   local column_info = hostinfo2detailshref(value, {page = "flows"}, "<span class='btn btn-sm btn-info'><i class='fas fa-stream'></i></span>")
+   local column_info = hostinfo2detailshref(value, {page = "flows"}, "<span class='btn btn-sm btn-warning'><i class='fas fa-stream'></i></span>")
 
    if have_nedge and (host ~= nil) and (host.localhost or host.systemhost) then
       column_info = column_info.." <span title='"..
@@ -379,7 +340,7 @@ for _key, _value in pairsByKeys(vals, funct) do
    local sent2rcvd = round((value["bytes.sent"] * 100) / (value["bytes.sent"]+value["bytes.rcvd"]), 0)
    if(sent2rcvd == nil) then sent2rcvd = 0 end
    record["column_breakdown"] = "<div class='progress'><div class='progress-bar bg-warning' style='width: "
-	     .. sent2rcvd .."%;'>Sent</div><div class='progress-bar bg-info' style='width: " .. (100-sent2rcvd) .. "%;'>Rcvd</div></div>"
+	     .. sent2rcvd .."%;'>Sent</div><div class='progress-bar bg-success' style='width: " .. (100-sent2rcvd) .. "%;'>Rcvd</div></div>"
 
    local _, custom_column_key = custom_column_utils.getCustomColumnName()
    record["column_"..custom_column_key] = custom_column_utils.hostStatsToColumnValue(value, custom_column_key, true)

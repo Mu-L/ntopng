@@ -40,6 +40,7 @@ class Host : public GenericHashEntry, public HostAlertableEntity, public Score, 
   bool stats_reset_requested, name_reset_requested, data_delete_requested;
   u_int16_t host_pool_id, host_services_bitmap;
   VLANid vlan_id;
+  u_int16_t observationPointId;
   u_int8_t num_remote_access;
   HostStats *stats, *stats_shadow;
   time_t last_stats_reset;
@@ -99,7 +100,7 @@ class Host : public GenericHashEntry, public HostAlertableEntity, public Score, 
   Bitmap128 disabled_flow_alerts;
   time_t disabled_alerts_tstamp;
 
-  void initialize(Mac *_mac, VLANid _vlan_id);
+  void initialize(Mac *_mac, VLANid _vlan_id, u_int16_t observation_point_id);
   void inlineSetOS(OSType _os);
   bool statsResetRequested();
   void checkStatsReset();
@@ -116,8 +117,8 @@ class Host : public GenericHashEntry, public HostAlertableEntity, public Score, 
   char* get_mac_based_tskey(Mac *mac, char *buf, size_t bufsize);
   
  public:
-  Host(NetworkInterface *_iface, char *ipAddress, VLANid _vlanId);
-  Host(NetworkInterface *_iface, Mac *_mac, VLANid _vlanId, IpAddress *_ip);
+  Host(NetworkInterface *_iface, char *ipAddress, VLANid _vlanId, u_int16_t observation_point_id);
+  Host(NetworkInterface *_iface, Mac *_mac, VLANid _vlanId, u_int16_t observation_point_id, IpAddress *_ip);
 
   virtual ~Host();
 
@@ -182,8 +183,11 @@ class Host : public GenericHashEntry, public HostAlertableEntity, public Score, 
   u_int16_t incScoreValue(u_int16_t score_incr, ScoreCategory score_category, bool as_client);
   u_int16_t decScoreValue(u_int16_t score_decr, ScoreCategory score_category, bool as_client);
 
-  inline u_int16_t get_host_pool()    const { return(host_pool_id);   };
-  inline VLANid get_vlan_id()      const { return(vlan_id);        };
+  inline u_int16_t get_host_pool()         const { return(host_pool_id);                      };
+  inline VLANid get_raw_vlan_id()          const { return(vlan_id);                           }; /* vlanId + observationPointId */
+  inline VLANid get_vlan_id()              const { return(filterVLANid(vlan_id));             };
+  inline VLANid get_observation_point_id() const { return(observationPointId); };
+  
   char* get_name(char *buf, u_int buf_len, bool force_resolution_if_not_found);
 
   inline void incSentTcp(u_int32_t ooo_pkts, u_int32_t retr_pkts, u_int32_t lost_pkts, u_int32_t keep_alive_pkts) {
@@ -274,7 +278,7 @@ class Host : public GenericHashEntry, public HostAlertableEntity, public Score, 
   char* get_hostkey(char *buf, u_int buf_len, bool force_vlan=false);
   char* get_tskey(char *buf, size_t bufsize);
 
-  bool is_hash_entry_state_idle_transition_ready() const;
+  bool is_hash_entry_state_idle_transition_ready();
   void periodic_stats_update(const struct timeval *tv);
   virtual void custom_periodic_stats_update(const struct timeval *tv) { ; }
   
@@ -473,7 +477,6 @@ class Host : public GenericHashEntry, public HostAlertableEntity, public Score, 
   inline u_int32_t upper_bound_flows_anomaly(bool as_client) { return(stats->upper_bound_flows_anomaly(as_client)); }
   
   inline bool has_score_anomaly(bool as_client) { return(stats->has_score_anomaly(as_client)); }
-  inline u_int32_t value_score_anomaly(bool as_client) { return(stats->value_score_anomaly(as_client)); }
   inline u_int32_t lower_bound_score_anomaly(bool as_client) { return(stats->lower_bound_score_anomaly(as_client)); }
   inline u_int32_t upper_bound_score_anomaly(bool as_client) { return(stats->upper_bound_score_anomaly(as_client)); }
 

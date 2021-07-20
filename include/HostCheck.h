@@ -24,19 +24,13 @@
 
 #include "ntop_includes.h"
 
-class HostCheck {
+class HostCheck : public Check {
  private:
-  NtopngEdition check_edition;
-  u_int8_t enabled:1 /*,  _unused:7 */;
   u_int32_t periodicity_secs;
 
  public:
-  HostCheck(NtopngEdition _edition);
+  HostCheck(NtopngEdition _edition, bool _packet_interface_only, bool _nedge_exclude, bool _nedge_only);
   virtual ~HostCheck();
-
-  /* Enable/Disable hooks */
-  virtual void scriptEnable()            {};
-  virtual void scriptDisable()           {};
   
   /* Check hook (periodic)
    * engaged_alert is the alert already engaged by the check
@@ -47,8 +41,7 @@ class HostCheck {
   inline bool isMinCheck()  const { return periodicity_secs == 60;  };
   inline bool is5MinCheck() const { return periodicity_secs == 300; };
 
-  inline void enable(u_int32_t _periodicity_secs) { enabled = 1; periodicity_secs = _periodicity_secs; }
-  inline bool isEnabled() { return(enabled ? true : false); }
+  inline void enable(u_int32_t _periodicity_secs) { Check::enable(); periodicity_secs = _periodicity_secs; }
 
   inline void addCheck(std::list<HostCheck*> *l, NetworkInterface *iface) { l->push_back(this); }
   virtual bool loadConfiguration(json_object *config);

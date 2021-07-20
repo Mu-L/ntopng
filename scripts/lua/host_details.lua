@@ -35,6 +35,7 @@ local flow_consts = require "flow_consts"
 local alert_consts = require "alert_consts"
 local plugins_utils = require "plugins_utils"
 local am_utils = plugins_utils.loadModule("active_monitoring", "am_utils")
+local behavior_utils = require "behavior_utils"
 
 local host_pools_nedge
 if ntop.isnEdge() then
@@ -138,7 +139,7 @@ local function scoreBreakdown(what)
       score_category_security = 100 - score_category_network
 
       print('<span class="progress w-100 ms-1"><span class="progress-bar bg-warning" style="width: '..score_category_network..'%;">'.. i18n("flow_details.score_category_network"))
-      print('</span><span class="progress-bar bg-info" style="width: ' .. score_category_security .. '%;">' .. i18n("flow_details.score_category_security") .. '</span></span>\n')
+      print('</span><span class="progress-bar bg-success" style="width: ' .. score_category_security .. '%;">' .. i18n("flow_details.score_category_security") .. '</span></span>\n')
    else
       print("&nbsp;")
    end
@@ -281,7 +282,7 @@ else
       print('<div style=\"display:none;\" id=\"host_purged\" class=\"alert alert-danger\"><i class="fas fa-exclamation-triangle"></i>&nbsp;'..i18n("details.host_purged")..'</div>')
    end
 
-   local title = i18n("host_details.host")..": "..host_info["host"]
+   local title = i18n("host_details.host")..": "..shortenString(host_label)
    if host["broadcast_domain_host"] then
       title = title.." &nbsp;<i class='fas fa-sitemap' aria-hidden='true' title='"..i18n("hosts_stats.label_broadcast_domain_host").."'></i>"
    end
@@ -302,29 +303,14 @@ else
    local service_map_link = ntop.getHttpPrefix() .. "/lua/pro/enterprise/service_map.lua?host=" .. host_ip
    local periodicity_map_link = ntop.getHttpPrefix() .. "/lua/pro/enterprise/periodicity_map.lua?&host=" .. host_ip
 
-   if(ntop.isEnterpriseL() and (ntop.getPref("ntopng.prefs.is_behaviour_analysis_enabled") == "1")) then
-      local service_map = interface.serviceMap(_GET["host"])
+   service_map_available, periodicity_map_available = behavior_utils.mapsAvailable()
 
-      if service_map and (table.len(service_map) > 0) then
-         service_map_available = true
-      end
-
-      if host_vlan ~= 0 then
-         service_map_link = service_map_link .. "&vlan=" .. host_vlan
-      end
+   if(service_map_available) and (host_vlan ~= 0) then
+   	  service_map_link = service_map_link .. "&vlan=" .. host_vlan		
    end
 
-   if(ntop.isEnterpriseL() and (ntop.getPref("ntopng.prefs.is_behaviour_analysis_enabled") == "1")) then
-      local periodicity_map = interface.periodicityMap(_GET["host"])
-
-      if periodicity_map and (table.len(periodicity_map) > 0) then
-         num_periodicity = table.len(periodicity_map)
-         periodicity_map_available = true
-      end
-
-      if host_vlan ~= 0 then
-         periodicity_map_link = periodicity_map_link .. "&vlan=" .. host_vlan
-      end
+   if(periodicity_map_available) and (host_vlan ~= 0) then
+   	  periodicity_map_link = periodicity_map_link .. "&vlan=" .. host_vlan		
    end
 
    page_utils.print_navbar(title, url,
@@ -409,12 +395,6 @@ else
 				 badge_num = host["active_http_hosts"],
 			      },
 			      {
-				 hidden = only_historical,
-				 active = page == "flows",
-				 page_name = "flows",
-				 label = i18n("flows"),
-			      },
-			      {
 				 hidden = only_historical or not host["localhost"] or (table.len(sites_granularities) == 0),
 				 active = page == "sites",
 				 page_name = "sites",
@@ -431,6 +411,12 @@ else
 				 active = page == "processes",
 				 page_name = "processes",
 				 label = i18n("user_info.processes"),
+			      },
+			      {
+				 hidden = only_historical,
+				 active = page == "flows",
+				 page_name = "flows",
+				 label = '<i class="fas fa-stream"></i>',
 			      },
 			      {
 				 hidden = only_historical or host["is_broadcast"] or host["is_multicast"] or not ntop.hasGeoIP(),
@@ -586,7 +572,12 @@ if((page == "overview") or (page == nil)) then
       print("</td></tr>\n")
    end
 
-   if(host["ip"] ~= nil) then
+   if((host["observation_point_id"] ~= nil) and (host["observation_point_id"] ~= 0)) then
+      print("<tr><th>"..i18n("details.observation_point_id").."</th>")
+      print("<td colspan=\"2\">"..host["observation_point_id"].."</td></tr>")
+   end
+
+if(host["ip"] ~= nil) then
       print("<tr><th>"..i18n("name").."</th>")
 
       if(isAdministrator()) then
@@ -607,14 +598,14 @@ if((page == "overview") or (page == nil)) then
       print(format_utils.formatFullAddressCategory(host))
 
       if(host.services) then
-	 if(host.services.dhcp) then print(' <span class="badge bg-info">'..i18n("details.label_dhcp_server")..'</span>') end
-	 if(host.services.dns)  then print(' <span class="badge bg-info">'..i18n("details.label_dns_server")..'</span>') end
-	 if(host.services.smtp) then print(' <span class="badge bg-info">'..i18n("details.label_smtp_server")..'</span>') end
-	 if(host.services.ntp)  then print(' <span class="badge bg-info">'..i18n("details.label_ntp_server")..'</span>') end
+	 if(host.services.dhcp) then print(' <span class="badge bg-success">'..i18n("details.label_dhcp_server")..'</span>') end
+	 if(host.services.dns)  then print(' <span class="badge bg-success">'..i18n("details.label_dns_server")..'</span>') end
+	 if(host.services.smtp) then print(' <span class="badge bg-success">'..i18n("details.label_smtp_server")..'</span>') end
+	 if(host.services.ntp)  then print(' <span class="badge bg-success">'..i18n("details.label_ntp_server")..'</span>') end
       end
 
-      if(host["dhcp_server"] == true) then print(' <span class="badge bg-info">'..i18n("details.label_dhcp_server")..'</span>') end
-      if(host["systemhost"] == true) then print(' <span class="badge bg-info"><i class=\"fas fa-flag\" title=\"'..i18n("details.label_system_ip")..'\"></i></span>') end
+      if(host["dhcp_server"] == true) then print(' <span class="badge bg-success">'..i18n("details.label_dhcp_server")..'</span>') end
+      if(host["systemhost"] == true) then print(' <span class="badge bg-success"><i class=\"fas fa-flag\" title=\"'..i18n("details.label_system_ip")..'\"></i></span>') end
       if(host["is_blacklisted"] == true) then print(' <span class="badge bg-danger">'..i18n("details.label_blacklisted_host")..'</span>') end
       if((host["privatehost"] == false) and (host["is_multicast"] == false) and (host["is_broadcast"] == false)) then
 	 print(' <A HREF="https://www.virustotal.com/gui/ip-address/'.. host["ip"] ..'/detection" target=_blank><img  width="100" height="20" src=\"'
@@ -932,7 +923,7 @@ end
    print("<tr><th>"..i18n("download").."&nbsp;<i class=\"fas fa-download fa-lg\"></i></th><td")
    local show_live_capture = ntop.isPcapDownloadAllowed()
    if(not show_live_capture) then print(" colspan=2") end
-   print("><A HREF='"..ntop.getHttpPrefix().."/lua/rest/v1/get/host/data.lua?ifid="..ifId.."&"..hostinfo2url(host_info).."'>JSON</A></td>")
+   print("><A HREF='"..ntop.getHttpPrefix().."/lua/rest/v2/get/host/data.lua?ifid="..ifId.."&"..hostinfo2url(host_info).."'>JSON</A></td>")
    print [[<td>]]
    if (show_live_capture and ifstats.isView == false and ifstats.isDynamic == false and interface.isPacketInterface()) then
       local live_traffic_utils = require("live_traffic_utils")
@@ -1033,9 +1024,9 @@ print [[/lua/get_arp_data.lua', { ifid: "]] print(ifId.."") print ('", '..hostin
 
       <script type='text/javascript'>
         window.onload=function() {
-          do_pie("#dscpPrecedenceSent", ']] print (ntop.getHttpPrefix()) print [[/lua/rest/v1/get/host/dscp/stats.lua', { direction: "sent", ifid: "]] print(ifId.."") print ('", '..hostinfo2json(host_info) .."}, \"\", refresh); \n")
+          do_pie("#dscpPrecedenceSent", ']] print (ntop.getHttpPrefix()) print [[/lua/rest/v2/get/host/dscp/stats.lua', { direction: "sent", ifid: "]] print(ifId.."") print ('", '..hostinfo2json(host_info) .."}, \"\", refresh); \n")
       print [[
-	  do_pie("#dscpPrecedenceReceived", ']] print (ntop.getHttpPrefix()) print [[/lua/rest/v1/get/host/dscp/stats.lua', { direction: "recv", ifid: "]] print(ifId.."") print ('", '..hostinfo2json(host_info) .."}, \"\", refresh); \n")
+	  do_pie("#dscpPrecedenceReceived", ']] print (ntop.getHttpPrefix()) print [[/lua/rest/v2/get/host/dscp/stats.lua', { direction: "recv", ifid: "]] print(ifId.."") print ('", '..hostinfo2json(host_info) .."}, \"\", refresh); \n")
       print [[
 	}
       </script>
@@ -1419,15 +1410,15 @@ elseif((page == "ndpi")) then
 
       print[[ do_pie("#topApplicationProtocols", ']]
       print (ntop.getHttpPrefix())
-   print [[/lua/rest/v1/get/host/l7/stats.lua', { ifid: "]] print(ifId.."") print ("\" , ") print(hostinfo2json(host_info)) print [[ }, "", refresh);
+   print [[/lua/rest/v2/get/host/l7/stats.lua', { ifid: "]] print(ifId.."") print ("\" , ") print(hostinfo2json(host_info)) print [[ }, "", refresh);
 
 				   do_pie("#topApplicationCategories", ']]
       print (ntop.getHttpPrefix())
-      print [[/lua/rest/v1/get/host/l7/stats.lua', { ndpi_category: "true", ifid: "]] print(ifId.."") print ("\" , ") print(hostinfo2json(host_info)) print [[ }, "", refresh);
+      print [[/lua/rest/v2/get/host/l7/stats.lua', { ndpi_category: "true", ifid: "]] print(ifId.."") print ("\" , ") print(hostinfo2json(host_info)) print [[ }, "", refresh);
 
 				   do_pie("#topApplicationBreeds", ']]
       print (ntop.getHttpPrefix())
-      print [[/lua/rest/v1/get/host/l7/stats.lua', { breed: "true", ifid: "]] print(ifId.."") print ("\" , ") print(hostinfo2json(host_info)) print [[ }, "", refresh);
+      print [[/lua/rest/v2/get/host/l7/stats.lua', { breed: "true", ifid: "]] print(ifId.."") print ("\" , ") print(hostinfo2json(host_info)) print [[ }, "", refresh);
 
 
 				}
@@ -1576,7 +1567,7 @@ elseif(page == "dns") then
    end
 elseif(page == "tls") then
    local fingerprint_type = 'ja3'
-   local endpoint = string.format(ntop.getHttpPrefix() .. "/lua/rest/v1/get/host/fingerprint/data.lua?fingerprint_type=%s&ifid=%s&host=%s", fingerprint_type, ifId, host_ip)
+   local endpoint = string.format(ntop.getHttpPrefix() .. "/lua/rest/v2/get/host/fingerprint/data.lua?fingerprint_type=%s&ifid=%s&host=%s", fingerprint_type, ifId, host_ip)
    local context = {
       json = json,
       template = template,
@@ -1589,7 +1580,7 @@ print(template.gen("pages/ja3_fingerprint.template", context))
 
 elseif(page == "ssh") then
    local fingerprint_type = 'hassh'
-   local endpoint = string.format(ntop.getHttpPrefix() .. "/lua/rest/v1/get/host/fingerprint/data.lua?fingerprint_type=%s&ifid=%s&host=%s", fingerprint_type, ifId, host_ip)
+   local endpoint = string.format(ntop.getHttpPrefix() .. "/lua/rest/v2/get/host/fingerprint/data.lua?fingerprint_type=%s&ifid=%s&host=%s", fingerprint_type, ifId, host_ip)
    local context = {
       json = json,
       template = template,
@@ -1674,7 +1665,7 @@ elseif(page == "sites") then
       print("<div class='alert alert-info'><i class='fas fa-info-circle fa-lg' aria-hidden='true'></i> "..msg.."</div>")
 
    elseif table.len(sites_granularities) > 0 then
-      local endpoint = string.format(ntop.getHttpPrefix() .. "/lua/pro/rest/v1/get/host/top/local/sites.lua?ifid=%s&host=%s&vlan=%s", ifId, host_ip, host_vlan)
+      local endpoint = string.format(ntop.getHttpPrefix() .. "/lua/pro/rest/v2/get/host/top/local/sites.lua?ifid=%s&host=%s&vlan=%s", ifId, host_ip, host_vlan)
       local context = {
          json = json,
          template = template,
@@ -2171,6 +2162,13 @@ local tags = {
 }
 
 local url = hostinfo2detailsurl(host, {page = "historical"})
+local show_graph = true
+
+if not host["localhost"] or 
+	(host["localhost"] == false or 
+	 host["is_multicast"] == true) then
+	show_graph = false
+end
 
 graph_utils.drawGraphs(ifId, schema, tags, _GET["zoom"], url, selected_epoch, {
    top_protocols = "top:host:ndpi",
@@ -2188,7 +2186,7 @@ graph_utils.drawGraphs(ifId, schema, tags, _GET["zoom"], url, selected_epoch, {
       {schema="host:alerted_flows",          label=i18n("graphs.total_alerted_flows")},
       {schema="host:unreachable_flows",      label=i18n("graphs.total_unreachable_flows")},
       {schema="host:contacts",               label=i18n("graphs.active_host_contacts")},
-      {schema="host:contacts_behaviour",     label=i18n("graphs.host_contacts_behaviour"), split_directions = true},
+      {schema="host:contacts_behaviour",     label=i18n("graphs.host_contacts_behaviour"), split_directions = true, metrics_labels = {i18n("graphs.contacts"), i18n("graphs.lower_bound"), i18n("graphs.upper_bound")}},
       {schema="host:total_alerts",           label=i18n("details.alerts")},
       {schema="host:engaged_alerts",         label=i18n("show_alerts.engaged_alerts")},
       {schema="host:host_unreachable_flows", label=i18n("graphs.host_unreachable_flows")},
@@ -2202,17 +2200,17 @@ graph_utils.drawGraphs(ifId, schema, tags, _GET["zoom"], url, selected_epoch, {
       {schema="host:tcp_packets",            label=i18n("graphs.tcp_packets")},
       {schema="host:udp_sent_unicast",       label=i18n("graphs.udp_sent_unicast_vs_non_unicast")},
       {schema="host:dscp",                   label=i18n("graphs.dscp_classes")},
-      {schema="host:srv_score_behaviour",         label=i18n("graphs.srv_score_behaviour"), split_directions = true},
-      {schema="host:cli_score_behaviour",         label=i18n("graphs.cli_score_behaviour"), split_directions = true},
-      {schema="host:srv_active_flows_behaviour",  label=i18n("graphs.srv_active_flows_behaviour"), split_directions = true},
-      {schema="host:cli_active_flows_behaviour",  label=i18n("graphs.cli_active_flows_behaviour"), split_directions = true},
+      {schema="host:srv_score_behaviour",         label=i18n("graphs.srv_score_behaviour"), split_directions = true, metrics_labels = {i18n("graphs.score"), i18n("graphs.lower_bound"), i18n("graphs.upper_bound")}},
+      {schema="host:cli_score_behaviour",         label=i18n("graphs.cli_score_behaviour"), split_directions = true, metrics_labels = {i18n("graphs.score"), i18n("graphs.lower_bound"), i18n("graphs.upper_bound")}},
+      {schema="host:srv_active_flows_behaviour",  label=i18n("graphs.srv_active_flows_behaviour"), split_directions = true, metrics_labels = {i18n("graphs.active_flows"), i18n("graphs.lower_bound"), i18n("graphs.upper_bound")}},
+      {schema="host:cli_active_flows_behaviour",  label=i18n("graphs.cli_active_flows_behaviour"), split_directions = true, metrics_labels = {i18n("graphs.active_flows"), i18n("graphs.lower_bound"), i18n("graphs.upper_bound")}},
       {schema="host:srv_score_anomalies",         label=i18n("graphs.srv_score_anomalies")},
       {schema="host:cli_score_anomalies",         label=i18n("graphs.cli_score_anomalies")},
       {schema="host:srv_active_flows_anomalies",  label=i18n("graphs.srv_active_flows_anomalies")},
       {schema="host:cli_active_flows_anomalies",  label=i18n("graphs.cli_active_flows_anomalies")},
    }, graph_utils.getDeviceCommonTimeseries()),
    device_timeseries_mac = host["mac"],
-})
+}, show_graph)
 
 elseif(page == "traffic_report") then
    package.path = dirs.installdir .. "/pro/scripts/lua/enterprise/?.lua;" .. package.path

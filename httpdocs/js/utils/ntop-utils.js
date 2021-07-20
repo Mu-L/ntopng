@@ -20,7 +20,7 @@ Date.prototype.format = function (format) { //author: meizz
 	return format;
 }
 
-// Extended disable function
+// Extended disable function 
 jQuery.fn.extend({
 	disable: function (state) {
 		return this.each(function () {
@@ -36,11 +36,12 @@ jQuery.fn.extend({
 const NTOPNG_MIN_VISUAL_VALUE = 0.005;
 
 const REGEXES = {
-	ipv4: "^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])$",
+	ipv4: "^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(@[0-9]+)?$",
 	ipv6: "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\:){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$|^\s*((([0-9A-Fa-f]{1,4}:){7}([0-9A-Fa-f]{1,4}|:))|(([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4}|((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(([0-9A-Fa-f]{1,4}:){5}(((:[0-9A-Fa-f]{1,4}){1,2})|:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(([0-9A-Fa-f]{1,4}:){4}(((:[0-9A-Fa-f]{1,4}){1,3})|((:[0-9A-Fa-f]{1,4})?:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){3}(((:[0-9A-Fa-f]{1,4}){1,4})|((:[0-9A-Fa-f]{1,4}){0,2}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){2}(((:[0-9A-Fa-f]{1,4}){1,5})|((:[0-9A-Fa-f]{1,4}){0,3}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){1}(((:[0-9A-Fa-f]{1,4}){1,6})|((:[0-9A-Fa-f]{1,4}){0,4}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(:(((:[0-9A-Fa-f]{1,4}){1,7})|((:[0-9A-Fa-f]{1,4}){0,5}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:)))(%.+)?\s*$",
 	domainName: "^(([a-zA-Z]{1})|([a-zA-Z]{1}[a-zA-Z]{1})|([a-zA-Z]{1}[0-9]{1})|([0-9]{1}[a-zA-Z]{1})|([a-zA-Z0-9][-_\.a-zA-Z0-9]{1,61}[a-zA-Z0-9]))\.([a-zA-Z]{2,13}|[a-zA-Z0-9-]{2,30}\.[a-zA-Z]{2,3})",
         port: "^([0-9]{1,4}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$",
 	url: "^(https?\:\/\/[^\/\\s]+(\/.*)?)$",
+	emailUrl: "^smtps?:\/\/[-a-zA-Z0-9:.]{1,256}+$",
 	macAddress: "^([0-9A-Fa-f]{2}:){5}([0-9A-Fa-f]{2})$",
 	username: "^(?=[a-zA-Z0-9._]{3,20}$)(?!.*[_.]{2})[^_.].*[^_.]$",
 	singleword: "^(?=[a-zA-Z0-9._\-]{3,20}$)(?!.*[_.\-]{2})[^_.\-].*[^_.\-]$",
@@ -73,7 +74,7 @@ class NtopUtils {
 
 		// resolve the hostname by doing a fetch request to the backend
 		try {
-			const request = await fetch(`${http_prefix}/lua/rest/v1/get/dns/resolve.lua?hostname=${hostname}`);
+			const request = await fetch(`${http_prefix}/lua/rest/v2/get/dns/resolve.lua?hostname=${hostname}`);
 			const response = await request.json();
 			return response;
 		}
@@ -952,7 +953,7 @@ class NtopUtils {
 	}
 
 	static getPoolLink(poolType, poolId = 0) {
-		return `${http_prefix}/lua/rest/v1/get/${poolType}/pools.lua?pool=${poolId}`;
+		return `${http_prefix}/lua/rest/v2/get/${poolType}/pools.lua?pool=${poolId}`;
 	}
 
 	static async getPool(poolType, id = 0) {

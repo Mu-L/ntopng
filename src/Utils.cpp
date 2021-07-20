@@ -223,6 +223,23 @@ char* Utils::l4proto2name(u_int8_t proto) {
 
 /* ****************************************************** */
 
+const char* Utils::edition2name(NtopngEdition ntopng_edition) {
+  switch(ntopng_edition) {
+  case ntopng_edition_community:
+    return "community";
+  case ntopng_edition_pro:
+    return "pro";
+  case ntopng_edition_enterprise_m:
+    return "enterprise_m";
+  case ntopng_edition_enterprise_l:
+    return "enterprise_l";
+  default:
+    return "unknown";
+  }
+}
+
+/* ****************************************************** */
+
 u_int8_t Utils::l4name2proto(const char *name) {
        if(strcmp(name, "IP") == 0) return 0;
   else if(strcmp(name, "ICMP") == 0) return 1;
@@ -1466,6 +1483,22 @@ static void readCurlStats(CURL *curl, HTTPTranferStats *stats, lua_State* vm) {
 
 /* **************************************** */
 
+static void fillcURLProxy(CURL *curl) {
+  if (getenv("HTTP_PROXY")) {
+    char proxy[1024];
+    
+    if(getenv("HTTP_PROXY_PORT"))
+      sprintf(proxy, "%s:%s", getenv("HTTP_PROXY"), getenv("HTTP_PROXY_PORT"));
+    else
+      sprintf(proxy, "%s", getenv("HTTP_PROXY"));
+
+    curl_easy_setopt(curl, CURLOPT_PROXY, proxy);
+    curl_easy_setopt(curl, CURLOPT_PROXYTYPE, CURLPROXY_HTTP);
+  }
+}
+
+/* **************************************** */
+
 bool Utils::postHTTPJsonData(char *username, char *password, char *url,
 			     char *json, int timeout, HTTPTranferStats *stats) {
   CURL *curl;
@@ -1476,6 +1509,8 @@ bool Utils::postHTTPJsonData(char *username, char *password, char *url,
     CURLcode res;
     struct curl_slist* headers = NULL;
 
+    fillcURLProxy(curl);
+    
     memset(stats, 0, sizeof(HTTPTranferStats));
     curl_easy_setopt(curl, CURLOPT_URL, url);
 
@@ -1549,6 +1584,7 @@ bool Utils::postHTTPJsonData(char *username, char *password, char *url,
   bool ret = false;
 
   curl = curl_easy_init();
+
   if(curl) {
     CURLcode res;
     struct curl_slist* headers = NULL;
@@ -1557,6 +1593,8 @@ bool Utils::postHTTPJsonData(char *username, char *password, char *url,
 			      /* .cur_size = */ 0,
 			      /* .max_size = */ (size_t)return_data_size};
 
+    fillcURLProxy(curl);
+    
     memset(stats, 0, sizeof(HTTPTranferStats));
     curl_easy_setopt(curl, CURLOPT_URL, url);
 
@@ -1639,11 +1677,14 @@ bool Utils::postHTTPTextFile(lua_State* vm, char *username, char *password, char
     file_len = (size_t)buf.st_size;
 
   curl = curl_easy_init();
+
   if(curl) {
     CURLcode res;
     DownloadState *state = NULL;
     struct curl_slist* headers = NULL;
 
+    fillcURLProxy(curl);
+    
     memset(stats, 0, sizeof(HTTPTranferStats));
     curl_easy_setopt(curl, CURLOPT_URL, url);
 
@@ -1755,7 +1796,8 @@ bool Utils::sendMail(lua_State* vm, char *from, char *to, char *cc, char *messag
   curl = curl_easy_init();
 
   if(curl) {
-
+    fillcURLProxy(curl);
+    
     if(username != NULL && password != NULL) {
       curl_easy_setopt(curl, CURLOPT_USERNAME, username);
       curl_easy_setopt(curl, CURLOPT_PASSWORD, password);
@@ -1765,6 +1807,8 @@ bool Utils::sendMail(lua_State* vm, char *from, char *to, char *cc, char *messag
 
     if(strncmp(smtp_server, "smtps://", 8) == 0)
       curl_easy_setopt(curl, CURLOPT_USE_SSL, CURLUSESSL_ALL);
+    else if(strncmp(smtp_server, "smtp://", 7) == 0)
+      curl_easy_setopt(curl, CURLOPT_USE_SSL, CURLUSESSL_NONE);
     else /* Try using SSL */
       curl_easy_setopt(curl, CURLOPT_USE_SSL, CURLUSESSL_TRY);
 
@@ -1960,10 +2004,13 @@ bool Utils::httpGetPost(lua_State* vm, char *url,
     DownloadState *state = NULL;
     ProgressState progressState;
     CURLcode curlcode;
+    struct curl_slist *headers = NULL;
     long response_code;
     char *content_type, *redirection;
     char ua[64];
 
+    fillcURLProxy(curl);
+    
     memset(stats, 0, sizeof(HTTPTranferStats));
     curl_easy_setopt(curl, CURLOPT_URL, url);
 
@@ -2013,27 +2060,24 @@ bool Utils::httpGetPost(lua_State* vm, char *url,
       curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)strlen(form_data));
 
       if(form_data[0] == '{' /* JSON */) {
-	struct curl_slist *hs = NULL;
 
-	hs = curl_slist_append(hs, "Content-Type: application/json");
+	headers = curl_slist_append(headers, "Content-Type: application/json");
 
 	if(tokenBuffer[0] != '\0') {
-	  hs = curl_slist_append(hs, tokenBuffer);
+	  headers = curl_slist_append(headers, tokenBuffer);
 	  used_tokenBuffer = true;
 	}
-
-	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, hs);
       }
     }
 
     if((tokenBuffer[0] != '\0') && (!used_tokenBuffer)) {
-      struct curl_slist *hs = NULL;
-
       snprintf(tokenBuffer, sizeof(tokenBuffer), "Authorization: Token %s", user_header_token);
-      hs = curl_slist_append(hs, tokenBuffer);
-      curl_easy_setopt(curl, CURLOPT_HTTPHEADER, hs);
+      headers = curl_slist_append(headers, tokenBuffer);
       used_tokenBuffer = true;
     }
+
+    if (headers != NULL)
+      curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 
     if(write_fname) {
       ntop->fixPath(write_fname);
@@ -2148,6 +2192,8 @@ bool Utils::httpGetPost(lua_State* vm, char *url,
       free(state);
 
     /* always cleanup */
+    if (headers != NULL)
+      curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
   }
 
@@ -2168,6 +2214,7 @@ long Utils::httpGet(const char * const url,
   char tokenBuffer[64];
 
   if(curl) {
+    struct curl_slist *headers = NULL;
     char *content_type;
     char ua[64];
     curl_fetcher_t fetcher = {
@@ -2175,6 +2222,8 @@ long Utils::httpGet(const char * const url,
 			      /* .cur_size = */ 0,
 			      /* .max_size = */ resp_len};
 
+    fillcURLProxy(curl);
+    
     curl_easy_setopt(curl, CURLOPT_URL, url);
 
     if(user_header_token == NULL) {
@@ -2188,12 +2237,12 @@ long Utils::httpGet(const char * const url,
 	curl_easy_setopt(curl, CURLOPT_HTTPAUTH, (long)CURLAUTH_BASIC);
       }
     } else {
-      struct curl_slist *hs = NULL;
-
       snprintf(tokenBuffer, sizeof(tokenBuffer), "Authorization: Token %s", user_header_token);
-      hs = curl_slist_append(hs, tokenBuffer);
-      curl_easy_setopt(curl, CURLOPT_HTTPHEADER, hs);
+      headers = curl_slist_append(headers, tokenBuffer);
     }
+
+    if (headers != NULL)
+      curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 
     if(!strncmp(url, "https", 5)) {
       curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
@@ -2226,6 +2275,8 @@ long Utils::httpGet(const char * const url,
     }
 
     /* always cleanup */
+    if (headers != NULL)
+      curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
   }
 
@@ -2267,6 +2318,7 @@ char* Utils::urlEncode(const char *url) {
     if(curl) {
       char *escaped = curl_easy_escape(curl, url, strlen(url));
       char *output = strdup(escaped);
+      
       curl_free(escaped);
       curl_easy_cleanup(curl);
 
@@ -4685,19 +4737,6 @@ u_int16_t Utils::country2u16(const char *country_code) {
 
 /* ****************************************************** */
 
-int Utils::snappend(char *str, size_t size, const char *tobeappended, const char *separator) {
-  int len = strlen(str), ret;
-
-  ret = snprintf(&str[len], size, "%s%s", (len > 0 && separator) ? separator : "", tobeappended);
-
-  if(ret < 0)
-    return ret;
-
-  return len + ret;
-}
-
-/* ****************************************************** */
-
 bool Utils::isNumber(const char *s, unsigned int s_len, bool *is_float) {
   unsigned int i;
   bool is_num = true;
@@ -4979,3 +5018,16 @@ void Utils::make_session_key(char *buf, u_int buf_len) {
 }
 
 /* ****************************************************** */
+
+/* Internal function used to set names to lower 
+ * Use this function only if you need to duplicate the string to be lowered
+ * otherwise use Utils::stringtolower(name)
+ */
+char* Utils::toLowerResolvedNames(const char *const resolvedName) {
+  char *name = strdup(resolvedName);
+  if(name) {
+    name = Utils::stringtolower(name);
+  }
+
+  return name;
+}

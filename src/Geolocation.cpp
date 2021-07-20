@@ -45,6 +45,7 @@ Geolocation::Geolocation() {
 #endif
     docs_path
   };
+  bool mmdbs_asn_ok = false, mmdbs_city_ok = false;
 
   mmdbs_ok = false;
   
@@ -54,11 +55,10 @@ Geolocation::Geolocation() {
   for(u_int i = 0; i < sizeof(lookup_paths) / sizeof(lookup_paths[0]) && !mmdbs_ok; i++) {
     DIR *dirp;
     struct dirent *dp;
-    bool mmdbs_asn_ok, mmdbs_city_ok;
     
     /* Let's try with MaxMind files DBs: https://dev.maxmind.com/geoip/geoipupdate/ */
-    mmdbs_asn_ok  = loadGeoDB(lookup_paths[i], "GeoLite2-ASN.mmdb",  &geo_ip_asn_mmdb);
-    mmdbs_city_ok = loadGeoDB(lookup_paths[i], "GeoLite2-City.mmdb", &geo_ip_city_mmdb);
+    if (!mmdbs_asn_ok)  mmdbs_asn_ok  = loadGeoDB(lookup_paths[i], "GeoLite2-ASN.mmdb",  &geo_ip_asn_mmdb);
+    if (!mmdbs_city_ok) mmdbs_city_ok = loadGeoDB(lookup_paths[i], "GeoLite2-City.mmdb", &geo_ip_city_mmdb);
 
     if(mmdbs_asn_ok && mmdbs_city_ok) {
       ntop->getTrace()->traceEvent(TRACE_NORMAL, "Using geolocation provided by MaxMind (https://maxmind.com)");
@@ -74,8 +74,6 @@ Geolocation::Geolocation() {
        - dbip-country-lite-YYYY-MM.mmdb
     */
 
-    mmdbs_asn_ok = mmdbs_city_ok = false;
-
     dirp = opendir(lookup_paths[i]);
     if(dirp == NULL)
       continue;
@@ -86,7 +84,9 @@ Geolocation::Geolocation() {
       if(strncmp(dp->d_name, "dbip-", 5) == 0) {
 	if((!mmdbs_asn_ok) && (strncmp(dp->d_name, "dbip-asn", 8) == 0)) {
 	  mmdbs_asn_ok  = loadGeoDB(lookup_paths[i], dp->d_name,  &geo_ip_asn_mmdb);
-	} else if((!mmdbs_city_ok) && (strncmp(dp->d_name, "dbip-country", 12) == 0)) {
+	}
+
+	if((!mmdbs_city_ok) && (strncmp(dp->d_name, "dbip-city", 9) == 0)) {
 	  mmdbs_city_ok = loadGeoDB(lookup_paths[i], dp->d_name, &geo_ip_city_mmdb);
 	}
       }
@@ -111,6 +111,8 @@ Geolocation::Geolocation() {
   if(!mmdbs_ok)
 #endif
     {
+    if (mmdbs_asn_ok) MMDB_close(&geo_ip_asn_mmdb);
+    if (mmdbs_city_ok) MMDB_close(&geo_ip_city_mmdb);
     ntop->getTrace()->traceEvent(TRACE_NORMAL, "Running without geolocation support.");
     ntop->getTrace()->traceEvent(TRACE_NORMAL, "To enable geolocation follow the instructions at");
     ntop->getTrace()->traceEvent(TRACE_NORMAL, "https://github.com/ntop/ntopng/blob/dev/doc/README.geolocation.md");

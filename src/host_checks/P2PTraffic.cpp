@@ -24,7 +24,7 @@
 
 /* ***************************************************** */
 
-P2PTraffic::P2PTraffic() : HostCheck(ntopng_edition_community) {
+P2PTraffic::P2PTraffic() : HostCheck(ntopng_edition_community, false /* All interfaces */, false /* Don't exclude for nEdge */, false /* NOT only for nEdge */) {
   p2p_bytes_threshold = (u_int64_t)-1;
 };
 
@@ -35,7 +35,7 @@ void P2PTraffic::periodicUpdate(Host *h, HostAlert *engaged_alert) {
   u_int64_t delta;
 
   if((delta = h->cb_status_delta_p2p_bytes(h->get_ndpi_stats()->getCategoryBytes(NDPI_PROTOCOL_CATEGORY_FILE_SHARING))) > p2p_bytes_threshold) {
-    if (!alert) alert = allocAlert(this, h, SCORE_LEVEL_ERROR, 0, delta, p2p_bytes_threshold);
+    if (!alert) alert = allocAlert(this, h, CLIENT_FULL_RISK_PERCENTAGE, delta, p2p_bytes_threshold);
     if (alert) h->triggerAlert(alert);
   }
 }

@@ -150,7 +150,7 @@
 #define MAX_NUM_VIEW_INTERFACES   8
 
 #define LIMITED_NUM_INTERFACES    8
-#define LIMITED_NUM_HOST_POOLS    4 /* 3 pools plus the NO_HOST_POOL_ID */
+#define LIMITED_NUM_HOST_POOLS    5 /* 3 pools plus the NO_HOST_POOL_ID plus the Jailed hosts pool */
 #define LIMITED_NUM_PROFILES      16
 #define LIMITED_NUM_POOL_MEMBERS  8
 #define UNLIMITED_NUM_INTERFACES  32
@@ -210,10 +210,10 @@
 #define TRAFFIC_FILTERING_TO_RESOLVE       "ntopng.trafficfiltering.toresolve"
 #define PREFS_CHANGED            "ntopng.cache.prefs_changed"
 #define DROP_HOST_TRAFFIC        "ntopng.prefs.drop_host_traffic"
-#define DROP_HOST_POOL_NAME      "Jailed hosts pool"
+#define DROP_HOST_POOL_NAME      "Jailed Hosts"
 #define DROP_HOST_POOL_LIST      "ntopng.cache.drop_host_list"
 #define DROP_TMP_ADD_HOST_LIST   "ntopng.cache.tmp_add_host_list"
-#define DROP_HOST_POOL_EXPIRATION_TIME    900 /*  15 m */
+#define DROP_HOST_POOL_EXPIRATION_TIME    1800 /*  30 m */
 #define HOST_TRAFFIC_QUOTA       "ntopng.prefs.hosts_quota"
 #define HTTP_ACL_MANAGEMENT_PORT "ntopng.prefs.http_acl_management_port"
 #define TEMP_ADMIN_PASSWORD      "ntopng.prefs.temp_admin_password"
@@ -265,6 +265,7 @@
 #define CONST_STR_USER_ID              NTOPNG_USER_PREFIX".%s.user_id"
 #define CONST_STR_USER_FULL_NAME       NTOPNG_USER_PREFIX".%s.full_name"
 #define CONST_STR_USER_PASSWORD        NTOPNG_USER_PREFIX".%s.password"
+#define CONST_STR_USER_THEME           NTOPNG_USER_PREFIX".%s.theme"
 #define CONST_STR_USER_NETS            NTOPNG_USER_PREFIX".%s.allowed_nets"
 #define CONST_STR_USER_ALLOWED_IFNAME  NTOPNG_USER_PREFIX".%s.allowed_ifname"
 #define CONST_STR_USER_HOST_POOL_ID    NTOPNG_USER_PREFIX".%s.host_pool_id"
@@ -309,8 +310,9 @@
 #define CONST_EST_MAX_FLOWS            200000
 #define CONST_EST_MAX_HOSTS            200000
 #define MIN_HOST_RESOLUTION_FREQUENCY  60  /* 1 min */
+#define NDPI_TRAFFIC_BEHAVIOR_REFRESH  60  /* 1 min */
 #define HOST_SITES_REFRESH             300 /* 5 min */
-#define IFACE_BEHAVIOR_REFRESH         60  /* 1 min */
+#define IFACE_BEHAVIOR_REFRESH         300 /* 5 min */
 #define ASES_BEHAVIOR_REFRESH          300 /* 5 min */
 #define NETWORK_BEHAVIOR_REFRESH       300 /* 5 min */
 #define TRAFFIC_MAP_REFRESH            30  /* 30 sec */
@@ -621,6 +623,10 @@
 #define CONST_PREFS_EMIT_FLOW_ALERTS        NTOPNG_PREFS_PREFIX".emit_flow_alerts"
 #define CONST_PREFS_EMIT_HOST_ALERTS        NTOPNG_PREFS_PREFIX".emit_host_alerts"
 
+
+#define CONST_PREFS_ASN_BEHAVIOR_ANALYSIS              NTOPNG_PREFS_PREFIX".is_asn_behavior_analysis_enabled"
+#define CONST_PREFS_NETWORK_BEHAVIOR_ANALYSIS          NTOPNG_PREFS_PREFIX".is_network_behavior_analysis_enabled"
+#define CONST_PREFS_IFACE_L7_BEHAVIOR_ANALYSIS         NTOPNG_PREFS_PREFIX".is_iface_l7_behavior_analysis_enabled"
 #define CONST_PREFS_BEHAVIOUR_ANALYSIS                  NTOPNG_PREFS_PREFIX".is_behaviour_analysis_enabled"
 #define CONST_PREFS_BEHAVIOUR_ANALYSIS_LEARNING_PERIOD  NTOPNG_PREFS_PREFIX".behaviour_analysis_learning_period"
 #define CONST_PREFS_BEHAVIOUR_ANALYSIS_STATUS_DURING_LEARNING  NTOPNG_PREFS_PREFIX".behaviour_analysis_learning_status_during_learning"
@@ -891,7 +897,7 @@
 #define STATS_MANAGER_STORE_NAME             "top_talkers.db"
 
 #define ALERTS_STORE_SCHEMA_FILE_NAME        "alert_store_schema.sql"
-#define ALERTS_STORE_DB_FILE_NAME            "alert_store_v07.db"
+#define ALERTS_STORE_DB_FILE_NAME            "alert_store_v11.db"
 
 #define NTOPNG_DATASOURCE_KEY                "ntopng.datasources"
 #define NTOPNG_DATASOURCE_URL                "/datasources/"
@@ -1109,6 +1115,7 @@ extern struct ntopngLuaContext* getUserdata(struct lua_State *vm);
 #define MAX_NUM_FINGERPRINT               25
 
 #define MAX_ENTROPY_BYTES                 4096
+#define MAX_NUM_OBSERVATION_POINTS        256
 
 #define ALERT_ACTION_ENGAGE           "engage"
 #define ALERT_ACTION_RELEASE          "release"
@@ -1125,6 +1132,8 @@ extern struct ntopngLuaContext* getUserdata(struct lua_State *vm);
 #ifndef WIN32
 #define CONST_DEFAULT_DUMP_SYSLOG_FACILITY LOG_DAEMON
 #endif
+
+#define UNKNOWN_FLOW_DIRECTION          2
 
 //#define PROFILING
 #ifdef PROFILING

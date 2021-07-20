@@ -191,8 +191,10 @@ local function isUserAccessAllowed(tags)
       return false
    end
 
-   if tags.host and not ntop.isAllowedNetwork(tags.host) then
-      traceError(TRACE_ERROR, TRACE_CONSOLE, "User: " .. _SESSION["user"] .. " is not allowed to access host " .. tags.host)
+   -- Note: tags.host can contain a MAC address for local broadcast domain hosts
+   local host = tags.host_ip or tags.host
+   if host and not ntop.isAllowedNetwork(host) then
+      traceError(TRACE_ERROR, TRACE_CONSOLE, "User: " .. _SESSION["user"] .. " is not allowed to access host " .. host)
       return false
    end
 
@@ -829,8 +831,20 @@ function ts_utils.getPossiblyChangedSchemas()
       "iface:score_behavior",
       "iface:score_anomalies",
       "iface:traffic_anomalies",
-      "iface:traffic_rx_behavior",
-      "iface:traffic_tx_behavior",
+      "iface:traffic_rx_behavior_v2",
+      "iface:traffic_tx_behavior_v2",
+
+      "subnet:score_anomalies",
+      "subnet:traffic_tx_behavior_v2",
+      "subnet:traffic_rx_behavior_v2",
+      "subnet:traffic_anomalies",
+      "subnet:score_behavior",
+
+      "asn:score_anomalies",
+      "asn:score_behavior",
+      "asn:traffic_anomalies",
+      "asn:traffic_rx_behavior_v2",
+      "asn:traffic_tx_behavior_v2",
 
       -- Host timeseries
       "host:contacts", -- split in "as_client" and "as_server"

@@ -35,32 +35,33 @@ class HostAlert {
   std::string check_name;
   time_t engage_time;
   time_t release_time;
-  u_int8_t score_as_cli;
-  u_int8_t score_as_srv;
-  u_int8_t is_attacker;
-  u_int8_t is_victim;
-
+  risk_percentage cli_pctg; /* The fraction of total risk that goes to the client */
+  bool is_attacker, is_victim; /* Whether the host of this alert is considered to be an attacker o a victim */
   /* 
      Adds to the passed `serializer` (generated with `getAlertSerializer`) information specific to this alert
    */
   virtual ndpi_serializer* getAlertJSON(ndpi_serializer* serializer)  { return serializer; }  
 
  public:
-  HostAlert(HostCheck *c, Host *h, u_int8_t cli_score, u_int8_t srv_score);
+  HostAlert(HostCheck *c, Host *h, risk_percentage _cli_pctg);
   virtual ~HostAlert();
 
-  inline u_int8_t getCliScore() { return score_as_cli; }
-  inline u_int8_t getSrvScore() { return score_as_srv; }
+  inline u_int8_t getCliScore() const { return (cli_pctg * getAlertScore()) / 100; }
+  inline u_int8_t getSrvScore() const { return (getAlertScore() - getCliScore());  }
+  /*
+    An alert is assumed to be client if the client score is positive and greater than the server score.
+    Similarly, it is assumed to be server when the server score is positive and greater than the client score.
+   */
+  inline bool isClient()   const { return getCliScore() > 0 && getCliScore() > getSrvScore(); }
+  inline bool isServer()   const { return getSrvScore() > 0 && getSrvScore() > getCliScore(); }
 
-  inline u_int16_t getScore()   { return score_as_cli + score_as_srv; }
+  inline void setAttacker()      { is_attacker = true; }
+  inline void setVictim()        { is_victim = true;   }
+  inline bool isAttacker() const { return is_attacker; }
+  inline bool isVictim()   const { return is_victim;   }
 
-  inline void setAttacker() { is_attacker = true; }
-  inline void setVictim()   { is_victim = true;   }
-
-  inline bool isAttacker() { return is_attacker; }
-  inline bool isVictim()   { return is_victim;   }
-
-  virtual HostAlertType getAlertType() const = 0;
+  virtual HostAlertType getAlertType()  const = 0;
+  virtual u_int8_t      getAlertScore() const { return SCORE_LEVEL_NOTICE; };
 
   /* Alert automatically released when the condition is no longer satisfied. */
   virtual bool hasAutoRelease()  { return true; }

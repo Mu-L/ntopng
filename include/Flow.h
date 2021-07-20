@@ -40,6 +40,7 @@ class Flow : public GenericHashEntry {
   Host *cli_host, *srv_host;
   IpAddress *cli_ip_addr, *srv_ip_addr;
   ICMPinfo *icmp_info;
+  u_int32_t flowCreationTime;
   u_int8_t cli2srv_tos, srv2cli_tos; /* RFC 2474, 3168 */
   u_int16_t cli_port, srv_port;
   VLANid vlanId;
@@ -79,7 +80,7 @@ class Flow : public GenericHashEntry {
 #ifdef NTOPNG_PRO
   bool ingress2egress_direction;
   u_int8_t routing_table_id;
-  bool lateral_movement;
+  bool lateral_movement, periodicity_changed;
 #ifndef HAVE_NEDGE
   FlowProfile *trafficProfile;
 #else
@@ -282,7 +283,8 @@ class Flow : public GenericHashEntry {
 
  public:
   Flow(NetworkInterface *_iface,
-       VLANid _vlanId, u_int8_t _protocol,
+       VLANid _vlanId, u_int16_t _observation_point_id,
+       u_int8_t _protocol,
        Mac *_cli_mac, IpAddress *_cli_ip, u_int16_t _cli_port,
        Mac *_srv_mac, IpAddress *_srv_ip, u_int16_t _srv_port,
        const ICMPinfo * const icmp_info,
@@ -347,13 +349,17 @@ class Flow : public GenericHashEntry {
 #ifdef NTOPNG_PRO
   inline bool isLateralMovement() const { return(lateral_movement);  }
   inline void setLateralMovement(bool change) { lateral_movement = change;  }
+  inline bool isPeriodicityChanged() const { return(periodicity_changed);  }
+  inline void setPeriodicityChanged(bool change) { periodicity_changed = change;  }
 #endif
 
   inline bool isCliDeviceAllowedProtocol() const {
     return !cli_host || cli_host->getDeviceAllowedProtocolStatus(get_detected_protocol(), true) == device_proto_allowed;
   }		      
   inline bool isSrvDeviceAllowedProtocol() const {
-    return !srv_host || srv_host->getDeviceAllowedProtocolStatus(get_detected_protocol(), false) == device_proto_allowed;
+    return !srv_host
+      || get_bytes_srv2cli() == 0 /* Server must respond to be considered NOT allowed */
+      || srv_host->getDeviceAllowedProtocolStatus(get_detected_protocol(), false) == device_proto_allowed;
   }
   inline bool isDeviceAllowedProtocol() const {
     return isCliDeviceAllowedProtocol() && isSrvDeviceAllowedProtocol();
@@ -413,6 +419,7 @@ class Flow : public GenericHashEntry {
   void updateTcpSeqIssues(const ParsedFlow *pf);
   void updateDNS(ParsedFlow *zflow);
   void updateHTTP(ParsedFlow *zflow);
+  void updateSuspiciousDGADomain();
   static void incTcpBadStats(bool src2dst_direction,
 			     Host *cli, Host *srv,
 			     NetworkInterface *iface,
@@ -479,7 +486,7 @@ class Flow : public GenericHashEntry {
   inline const struct ndpi_in6_addr* get_srv_ipv6() const { return(srv_host->get_ip()->get_ipv6());  };
   inline u_int16_t get_cli_port()        const { return(ntohs(cli_port));                 };
   inline u_int16_t get_srv_port()        const { return(ntohs(srv_port));                 };
-  inline VLANid    get_vlan_id()         const { return(vlanId);                          };
+  inline VLANid    get_vlan_id()              const { return(filterVLANid(vlanId));                        };
   inline u_int8_t  get_protocol()        const { return(protocol);                        };
   inline u_int64_t get_bytes()           const { return(stats.get_cli2srv_bytes() + stats.get_srv2cli_bytes() );                };
   inline u_int64_t get_bytes_cli2srv()   const { return(stats.get_cli2srv_bytes());                                             };
@@ -569,7 +576,7 @@ class Flow : public GenericHashEntry {
     else
       *actual_client = get_cli_host(), *actual_server = get_srv_host();
   };
-  bool is_hash_entry_state_idle_transition_ready() const;
+  bool is_hash_entry_state_idle_transition_ready();
   void hosts_periodic_stats_update(NetworkInterface *iface, Host *cli_host, Host *srv_host, PartializableFlowTrafficStats *partial,
 				   bool first_partial, const struct timeval *tv) const;
   void periodic_stats_update(const struct timeval *tv);
@@ -583,8 +590,10 @@ class Flow : public GenericHashEntry {
   static u_int32_t key(Host *cli, u_int16_t cli_port,
 		       Host *srv, u_int16_t srv_port,
 		       VLANid vlan_id,
+		       u_int16_t _observation_point_id,
 		       u_int16_t protocol);
-  void lua(lua_State* vm, AddressTree * ptree, DetailsLevel details_level, bool asListElement);
+  void lua(lua_State* vm, AddressTree * ptree,
+	   DetailsLevel details_level, bool asListElement);
   void lua_get_min_info(lua_State* vm);
   void lua_duration_info(lua_State* vm);
   void lua_snmp_info(lua_State* vm);
@@ -618,7 +627,8 @@ class Flow : public GenericHashEntry {
 
   bool equal(const IpAddress *_cli_ip, const IpAddress *_srv_ip,
 	     u_int16_t _cli_port, u_int16_t _srv_port,
-	     VLANid _vlanId, u_int8_t _protocol,
+	     VLANid _vlanId, u_int16_t _observation_point_id,
+	     u_int8_t _protocol,
 	     const ICMPinfo * const icmp_info,
 	     bool *src2srv_direction) const;
   void sumStats(nDPIStats *ndpi_stats, FlowStats *stats);
@@ -664,7 +674,6 @@ class Flow : public GenericHashEntry {
   inline ndpi_risk getRiskBitmap() const { return ndpi_flow_risk_bitmap; }
   bool hasRisk(ndpi_risk_enum r) const;
   bool hasRisks() const;
-
   inline char* getDGADomain() const { return(hasRisk(NDPI_SUSPICIOUS_DGA_DOMAIN) && suspicious_dga_domain ? suspicious_dga_domain : (char*)""); }
   inline char* getDNSQuery()  const { return(isDNS() ? protos.dns.last_query : (char*)"");  }
   bool setDNSQuery(char *v);
@@ -746,10 +755,11 @@ class Flow : public GenericHashEntry {
     flow_device.device_ip = device_ip, flow_device.observation_point_id = observation_point_id;
     flow_device.in_index = inidx, flow_device.out_index = outidx;
   }
-  inline u_int32_t getFlowDeviceIp()           { return flow_device.device_ip;            };
-  inline u_int32_t getFlowObservationPointId() { return flow_device.observation_point_id; };
-  inline u_int32_t getFlowDeviceInIndex()      { return flow_device.in_index;             };
-  inline u_int32_t getFlowDeviceOutIndex()     { return flow_device.out_index;            };
+  inline u_int32_t getFlowDeviceIp()           { return flow_device.device_ip;             };
+  inline u_int16_t getFlowObservationPointId() { return flow_device.observation_point_id;  };
+  inline u_int16_t get_observation_point_id()  { return(getFlowObservationPointId());      };
+  inline u_int32_t getFlowDeviceInIndex()      { return flow_device.in_index;              };
+  inline u_int32_t getFlowDeviceOutIndex()     { return flow_device.out_index;             };
 
   inline const u_int16_t getScore()            const { return(flow_score); };
 

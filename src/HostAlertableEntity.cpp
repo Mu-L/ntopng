@@ -109,7 +109,7 @@ void HostAlertableEntity::countAlerts(grouped_alerts_counters *counters) {
   for (u_int i = 0; i < NUM_DEFINED_HOST_CHECKS; i++) {
     HostAlert *alert = engaged_alerts[i];
     if (alert) {
-      counters->severities[std::make_pair(getEntityType(), Utils::mapScoreToSeverity(alert->getScore()))]++;
+      counters->severities[std::make_pair(getEntityType(), Utils::mapScoreToSeverity(alert->getAlertScore()))]++;
       counters->types[std::make_pair(getEntityType(), alert->getAlertType().id)]++;
     }
   }
@@ -130,8 +130,8 @@ void HostAlertableEntity::luaAlert(lua_State* vm, HostAlert *alert) {
   */
   lua_push_int32_table_entry(vm,  "alert_id", alert->getAlertType().id);
   lua_push_str_table_entry(vm,    "subtype", "" /* No subtype for hosts */);
-  lua_push_int32_table_entry(vm,  "score", alert->getScore());
-  lua_push_int32_table_entry(vm,  "severity", Utils::mapScoreToSeverity(alert->getScore()));
+  lua_push_int32_table_entry(vm,  "score", alert->getAlertScore());
+  lua_push_int32_table_entry(vm,  "severity", Utils::mapScoreToSeverity(alert->getAlertScore()));
   lua_push_int32_table_entry(vm,  "entity_id", alert_entity_host);
   lua_push_str_table_entry(vm,    "entity_val", alert->getHost()->getEntityValue().c_str());
   lua_push_uint64_table_entry(vm, "tstamp", alert->getEngageTime());
@@ -143,6 +143,8 @@ void HostAlertableEntity::luaAlert(lua_State* vm, HostAlert *alert) {
   lua_push_uint64_table_entry(vm, "vlan_id", alert->getHost()->get_vlan_id());
   lua_push_bool_table_entry(vm, "is_attacker", alert->isAttacker());
   lua_push_bool_table_entry(vm, "is_victim", alert->isVictim());
+  lua_push_bool_table_entry(vm, "is_client", alert->isClient());
+  lua_push_bool_table_entry(vm, "is_server", alert->isServer());
 
   HostCheck *cb = getAlertInterface()->getCheck(alert->getCheckType());
   lua_push_int32_table_entry(vm,  "granularity", cb ? cb->getPeriod() : 0);
@@ -173,11 +175,10 @@ void HostAlertableEntity::getAlerts(lua_State* vm, ScriptPeriodicity p /* not us
       if((type_filter == alert_none
 	   || type_filter == alert->getAlertType().id)
 	  && (severity_filter == alert_level_none
-	      || severity_filter == Utils::mapScoreToSeverity(alert->getScore()))
-	  && (role_filter == alert_role_any
+	      || severity_filter == Utils::mapScoreToSeverity(alert->getAlertScore()))
+	  && (role_filter == alert_role_is_any
 	      || (role_filter == alert_role_is_attacker && alert->isAttacker())
-	      || (role_filter == alert_role_is_victim && alert->isVictim())
-	      || (role_filter == alert_role_is_both && (alert->isAttacker() || alert->isVictim())))) {
+	      || (role_filter == alert_role_is_victim && alert->isVictim()))) {
         lua_newtable(vm);
         luaAlert(vm, alert);
 

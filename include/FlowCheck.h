@@ -24,24 +24,14 @@
 
 #include "ntop_includes.h"
 
-class FlowCheck {
+class FlowCheck : public Check {
  private:
-  NtopngEdition check_edition;
-  u_int8_t has_protocol_detected:1, has_periodic_update:1, has_flow_end:1, packet_interface_only:1, nedge_exclude:1, nedge_only:1, enabled:1/* , _unused:1 */;
-
-  bool isCheckCompatibleWithInterface(NetworkInterface *iface);
+  bool has_protocol_detected, has_periodic_update, has_flow_end;
 
  public:
   FlowCheck(NtopngEdition _edition, bool _packet_interface_only, bool _nedge_exclude, bool _nedge_only,
 	       bool _has_protocok_detected, bool _has_periodic_update, bool _has_flow_end);
   virtual ~FlowCheck();
-
-  /* Compatibility */
-  bool isCheckCompatibleWithEdition() const;
-
-  /* Enable/Disable hooks */
-  virtual void scriptEnable()            {};
-  virtual void scriptDisable()           {};
   
   /* Check hooks */
   virtual void protocolDetected(Flow *f) {};
@@ -51,15 +41,12 @@ class FlowCheck {
   /* Used to build an alert when triggerAlertAsync is used */
   virtual FlowAlert *buildAlert(Flow *f) { return NULL; };
 
-  inline void enable()    { enabled = 1; }
-  inline bool isEnabled() { return(enabled ? true : false); }
-
   void addCheck(std::list<FlowCheck*> *l, NetworkInterface *iface, FlowChecks check);
   virtual bool loadConfiguration(json_object *config);
   
   virtual std::string getName()        const = 0;
 
-  static void computeCliSrvScore(FlowAlertType alert_type, u_int8_t cli_pctg, u_int8_t *cli_score, u_int8_t *srv_score);
+  static void computeCliSrvScore(FlowAlertType alert_type, risk_percentage cli_pctg, u_int8_t *cli_score, u_int8_t *srv_score);
 };
 
 #endif /* _FLOW_CHECK_H_ */

@@ -19,6 +19,8 @@ local have_nedge = ntop.isnEdge()
 
 local ts_utils = require("ts_utils")
 
+local iface_behavior_update_freq = 300 --Seconds
+
 -- ########################################################
 
 local graph_utils = {}
@@ -160,7 +162,7 @@ function graph_utils.breakdownBar(sent, sentLabel, rcvd, rcvdLabel, thresholdLow
     elseif(sent2rcvd > thresholdHigh) then rcvdLabel = '<i class="fas fa-exclamation-triangle fa-lg""></i> '..rcvdLabel end
 
       print('<div class="progress"><div class="progress-bar bg-warning" aria-valuenow="'.. sent2rcvd..'" aria-valuemin="0" aria-valuemax="100" style="width: ' .. sent2rcvd.. '%;">'..sentLabel)
-      print('</div><div class="progress-bar bg-info" aria-valuenow="'.. (100-sent2rcvd)..'" aria-valuemin="0" aria-valuemax="100" style="width: ' .. (100-sent2rcvd) .. '%;">' .. rcvdLabel .. '</div></div>')
+      print('</div><div class="progress-bar bg-success" aria-valuenow="'.. (100-sent2rcvd)..'" aria-valuemin="0" aria-valuemax="100" style="width: ' .. (100-sent2rcvd) .. '%;">' .. rcvdLabel .. '</div></div>')
 
    else
       print('&nbsp;')
@@ -312,7 +314,7 @@ end
 
 -- ########################################################
 
-function graph_utils.drawGraphs(ifid, schema, tags, zoomLevel, baseurl, selectedEpoch, options)
+function graph_utils.drawGraphs(ifid, schema, tags, zoomLevel, baseurl, selectedEpoch, options, show_graph)
    local page_utils =require("page_utils") -- Do not require at the top as it could conflict with plugins_utils.getMenuEntries
    local debug_rrd = false
    local is_system_interface = page_utils.is_system_view()
@@ -354,7 +356,7 @@ function graph_utils.drawGraphs(ifid, schema, tags, zoomLevel, baseurl, selected
 
    if graph_utils.drawProGraph then
       _ifstats = interface.getStats()
-      graph_utils.drawProGraph(ifid, schema, tags, zoomLevel, baseurl, options)
+      graph_utils.drawProGraph(ifid, schema, tags, zoomLevel, baseurl, options, show_graph)
       return
    end
 
@@ -1047,7 +1049,8 @@ local default_timeseries = {
    {schema="iface:new_flows",             label=i18n("graphs.new_flows"), value_formatter = {"NtopUtils.fflows", "NtopUtils.formatFlows"}},
    {schema="iface:alerted_flows",         label=i18n("graphs.total_alerted_flows")},
    {schema="iface:hosts",                 label=i18n("graphs.active_hosts")},
-   {schema="iface:alerts_stats",          label=i18n("show_alerts.iface_engaged_dropped_alerts"), skip=hasAllowedNetworksSet()},
+   {schema="iface:engaged_alerts",        label=i18n("show_alerts.engaged_alerts"), metrics_labels = { i18n("show_alerts.engaged_alerts") }, skip=hasAllowedNetworksSet()},
+   {schema="iface:dropped_alerts",        label=i18n("show_alerts.dropped_alerts"), metrics_labels = { i18n("show_alerts.dropped_alerts") }, skip=hasAllowedNetworksSet()},
    {schema="custom:flows_vs_local_hosts", label=i18n("graphs.flows_vs_local_hosts"), check={"iface:flows", "iface:local_hosts"}, step=60},
    {schema="custom:flows_vs_traffic",     label=i18n("graphs.flows_vs_traffic"), check={"iface:flows", "iface:traffic"}, step=60},
    {schema="custom:memory_vs_flows_hosts", label=i18n("graphs.memory_vs_hosts_flows"), check={"process:resident_memory", "iface:flows", "iface:hosts"}},
@@ -1055,7 +1058,8 @@ local default_timeseries = {
    {schema="iface:http_hosts",            label=i18n("graphs.active_http_servers"), nedge_exclude=1},
    {schema="iface:traffic",               label=i18n("traffic")},
    {schema="iface:score",                 label=i18n("score"), metrics_labels = { i18n("graphs.cli_score"), i18n("graphs.srv_score")}},
-   {schema="iface:traffic_rxtx",          label=i18n("graphs.traffic_rxtx"), layout={ ["bytes_sent"] = "area", ["bytes_rcvd"] = "line" } },
+   {schema="custom:score_vs_flows_hosts",  label=i18n("graphs.score_vs_hosts_flows"), check={"iface:score", "iface:flows", "iface:hosts"}, metrics_labels = { i18n("graphs.cli_score"), i18n("graphs.srv_score")}},
+   {schema="iface:traffic_rxtx",          label=i18n("graphs.traffic_rxtx"), split_directions = true, layout={ ["bytes_sent"] = "area", ["bytes_rcvd"] = "line" }, value_formatter = {"NtopUtils.fbits_from_bytes", "NtopUtils.bytesToSize"} },
    {schema="iface:packets_vs_drops",      label=i18n("graphs.packets_vs_drops")},
    {schema="iface:nfq_pct",               label=i18n("graphs.num_nfq_pct"), nedge_only=1},
    {schema="iface:hosts_anomalies",       label=i18n("graphs.hosts_anomalies"), layout={ ["num_local_hosts_anomalies"] = "area", ["num_remote_hosts_anomalies"] = "area" }, metrics_labels = { i18n("graphs.loc_host_anomalies"), i18n("graphs.rem_host_anomalies")}  },
@@ -1085,10 +1089,10 @@ local default_timeseries = {
 if ntop.isPro() then
    local pro_timeseries = {
       {schema="iface:score_anomalies",       label=i18n("graphs.iface_score_anomalies")},
-      {schema="iface:score_behavior",        label=i18n("graphs.iface_score_behavior"), split_directions = true --[[ split RX and TX directions ]]},
+      {schema="iface:score_behavior",        label=i18n("graphs.iface_score_behavior"), split_directions = true --[[ split RX and TX directions ]], first_timeseries_only = true, metrics_labels = {i18n("graphs.score"), i18n("graphs.lower_bound"), i18n("graphs.upper_bound")}},
       {schema="iface:traffic_anomalies",     label=i18n("graphs.iface_traffic_anomalies")},
-      {schema="iface:traffic_rx_behavior",   label=i18n("graphs.iface_traffic_rx_behavior"), split_directions = true --[[ split RX and TX directions ]], value_formatter = {"fbits"}},
-      {schema="iface:traffic_tx_behavior",   label=i18n("graphs.iface_traffic_tx_behavior"), split_directions = true --[[ split RX and TX directions ]], value_formatter = {"fbits"}},
+      {schema="iface:traffic_rx_behavior_v2",   label=i18n("graphs.iface_traffic_rx_behavior"), split_directions = true --[[ split RX and TX directions ]], first_timeseries_only = true, time_elapsed = iface_behavior_update_freq, value_formatter = {"NtopUtils.fbits_from_bytes", "NtopUtils.bytesToSize"}, metrics_labels = {i18n("graphs.traffic_rcvd"), i18n("graphs.lower_bound"), i18n("graphs.upper_bound")}},
+      {schema="iface:traffic_tx_behavior_v2",   label=i18n("graphs.iface_traffic_tx_behavior"), split_directions = true --[[ split RX and TX directions ]], first_timeseries_only = true, time_elapsed = iface_behavior_update_freq, value_formatter = {"NtopUtils.fbits_from_bytes", "NtopUtils.bytesToSize"}, metrics_labels = {i18n("graphs.traffic_sent"), i18n("graphs.lower_bound"), i18n("graphs.upper_bound")}},
    }
 
    default_timeseries = table.merge(pro_timeseries, default_timeseries)

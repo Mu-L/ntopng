@@ -577,6 +577,7 @@ class DataTableUtils {
                 `);
 
                 $checkbox.on('change', function (e) {
+                    $(`.overlay`).toggle(500);
                     
                     // Get the column API object
                     const col = tableAPI.column(column.index);
@@ -645,8 +646,8 @@ class DataTableRenders {
         return seconds;
     }
 
-    static filterize(key, value, label, tag_label) {
-        return `<a class='tag-filter' data-tag-key='${key}' data-tag-value='${value}' data-tag-label='${tag_label || label || value}' href='#'>${label || value}</a>`;
+    static filterize(key, value, label, tag_label, title) {
+        return `<a class='tag-filter' data-tag-key='${key}' title='${title || value}' data-tag-value='${value}' data-tag-label='${tag_label || label || value}' href='#'>${label || value}</a>`;
     }
 
     static formatValueLabel(obj, type, row) {
@@ -656,12 +657,20 @@ class DataTableRenders {
         return cell;
     }
 
+    static formatSubtype(obj, type, row) {
+        if (type !== "display") return obj;
+
+        let label = DataTableRenders.filterize('subtype', obj, obj);
+
+        return label; 
+    }
+
     static formatHost(obj, type, row) {
         if (type !== "display") return obj;
     	let html_ref = '';
 	if (obj.reference !== undefined)
 	   html_ref = obj.reference
-	let label = obj.shown_label || obj.label;
+	let label = obj.label;
         
         label = DataTableRenders.filterize('ip', obj.value, label);
 
@@ -671,6 +680,13 @@ class DataTableRenders {
         else if (row.role && row.role.value == 'victim')
           label = label + ' ' + DataTableRenders.filterize('role', row.role.value,
             '<i class="fas fa-sad-tear" title="'+row.role.label+'"></i>', row.role.label);
+
+        if (row.role_cli_srv && row.role_cli_srv.value == 'client')
+          label = label + ' ' + DataTableRenders.filterize('role_cli_srv', row.role_cli_srv.value, 
+            '<i class="fas fa-long-arrow-alt-right" title="'+row.role_cli_srv.label+'"></i>', row.role_cli_srv.label);
+        else if (row.role_cli_srv && row.role_cli_srv.value == 'server')
+          label = label + ' ' + DataTableRenders.filterize('role_cli_srv', row.role_cli_srv.value,
+            '<i class="fas fa-long-arrow-alt-left" title="'+row.role_cli_srv.label+'"></i>', row.role_cli_srv.label);
 
         return label + ' ' + html_ref; 
     }
@@ -689,16 +705,16 @@ class DataTableRenders {
         let srvIcons = "";
         if (row.cli_role) {
             if (row.cli_role.value == 'attacker')
-                cliIcons += DataTableRenders.filterize('roles', 'has_attacker', '<i class="fas fa-skull" title="'+row.cli_role.label+'"></i>', row.cli_role.tag_label);
+                cliIcons += DataTableRenders.filterize('role', 'attacker', '<i class="fas fa-skull" title="'+row.cli_role.label+'"></i>', row.cli_role.tag_label);
             else if (row.cli_role.value == 'victim')
-                cliIcons += DataTableRenders.filterize('roles', 'has_victim',  '<i class="fas fa-sad-tear" title="'+row.cli_role.label+'"></i>', row.cli_role.tag_label);
+                cliIcons += DataTableRenders.filterize('role', 'victim',  '<i class="fas fa-sad-tear" title="'+row.cli_role.label+'"></i>', row.cli_role.tag_label);
         }
 
         if (row.srv_role) {
             if (row.srv_role.value == 'attacker')
-                srvIcons += DataTableRenders.filterize('roles', 'has_attacker', '<i class="fas fa-skull" title="'+row.srv_role.label+'"></i>', row.srv_role.tag_label);
+                srvIcons += DataTableRenders.filterize('role', 'attacker', '<i class="fas fa-skull" title="'+row.srv_role.label+'"></i>', row.srv_role.tag_label);
             else if (row.srv_role.value == 'victim')
-                srvIcons += DataTableRenders.filterize('roles', 'has_victim',  '<i class="fas fa-sad-tear" title="'+row.srv_role.label+'"></i>', row.srv_role.tag_label);
+                srvIcons += DataTableRenders.filterize('role', 'victim',  '<i class="fas fa-sad-tear" title="'+row.srv_role.label+'"></i>', row.srv_role.tag_label);
         }
 
         return `${active_ref} ${historical_ref} ${cliLabel}${cliPortLabel} ${cliIcons} ${flow.cli_ip.reference} <i class="fas fa-exchange-alt fa-lg" aria-hidden="true"></i> ${srvLabel}${srvPortLabel} ${srvIcons} ${flow.srv_ip.reference}`;
@@ -706,9 +722,10 @@ class DataTableRenders {
 
     static formatNameDescription(obj, type, row) {
         if (type !== "display") return obj.name;
-        let msg = DataTableRenders.filterize('alert_id', obj.value, obj.name);
+        let msg = DataTableRenders.filterize('alert_id', obj.value, obj.name, obj.fullname, obj.fullname);
 
-        if (obj.description) {
+	/* DECIDED NOT TO SHOW SHORTENED DESCRIPTIONS IN THE ALERT COLUMNS
+        if(obj.description) {
            const strip_tags = function(html) { let t = document.createElement("div"); t.innerHTML = html; return t.textContent || t.innerText || ""; }
            let desc = strip_tags(obj.description);
            if(desc.startsWith(obj.name)) desc = desc.replace(obj.name, "");
@@ -717,15 +734,15 @@ class DataTableRenders {
            let total_len = name_len + desc_len;
            let tooltip = ""
 
-           let limit = 50; /* description limit */
+           let limit = 30; // description limit
            if (row.family != 'flow') {
-             limit = 80; /* some families have room for bigger descriptions */
+             limit = 50; // some families have room for bigger descriptions
            }
 
-           if (total_len > limit) { /* cut and set a tooltip */
+           if (total_len > limit) { // cut and set a tooltip
              if (name_len >= limit) {
-               desc = ""; /* name is already too long, no description */
-             } else { /* cut the description */
+               desc = ""; // name is already too long, no description
+             } else { // cut the description
                desc = desc.substr(0, limit - obj.name.length);
                desc = desc.replace(/\s([^\s]*)$/, ''); // word break
                desc = desc + '&hellip;'; // add '...'
@@ -735,7 +752,8 @@ class DataTableRenders {
 
            msg = msg + ': <span title="' + tooltip + '">' + desc + '</span>';
         }
-        if (obj.configset_ref) msg = msg + obj.configset_ref;
+	*/
+
         return msg;
     }
 

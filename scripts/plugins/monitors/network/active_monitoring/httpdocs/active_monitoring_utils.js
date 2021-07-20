@@ -2,7 +2,7 @@ $(function() {
 
     const MAX_RECIPIENTS = 3;
     const DEFAULT_MEASUREMENT = "cicmp";
-    const INFRASTRUCTURE_ENDPOINT = "/lua/rest/v1/get/system/data.lua";
+    const INFRASTRUCTURE_ENDPOINT = "/lua/rest/v2/get/system/data.lua";
 
     const getMeasurementRegex = (measurement) => {
         switch (measurement) {
@@ -366,7 +366,7 @@ $(function() {
             return {
                 action: 'delete',
                 am_host: amData.host,
-                measurement: amData.measurement,
+                measurement: amData.measurement_key,
                 csrf: am_csrf
             }
         },
@@ -541,6 +541,10 @@ $(function() {
                         { class: `btn-danger ${disabled}`, icon: 'fa-trash', modal: '#am-delete-modal', }
                     ]);
                 }
+            },
+	    {
+                data: 'measurement_key',
+		visible: false
             }
         ]
     });

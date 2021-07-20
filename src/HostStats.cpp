@@ -74,7 +74,7 @@ void HostStats::updateStats(const struct timeval *tv) {
     if(active_flows_cli.addObservation(host->getNumOutgoingFlows())) {
       char buf[64];
 
-      ntop->getTrace()->traceEvent(TRACE_NORMAL, "[ANOMALY] %s [%s][client flows] [value: %u]",
+      ntop->getTrace()->traceEvent(TRACE_INFO, "[ANOMALY] %s [%s][client flows] [value: %u]",
 				   host->get_ip()->print(buf, sizeof(buf)),
 				   iface->get_name(),
 				   host->getNumOutgoingFlows());
@@ -86,7 +86,7 @@ void HostStats::updateStats(const struct timeval *tv) {
     if(active_flows_srv.addObservation(host->getNumIncomingFlows())) {
       char buf[64];
 
-      ntop->getTrace()->traceEvent(TRACE_NORMAL, "[ANOMALY] %s [%s][server flows] [value: %u]",
+      ntop->getTrace()->traceEvent(TRACE_INFO, "[ANOMALY] %s [%s][server flows] [value: %u]",
 				   host->get_ip()->print(buf, sizeof(buf)),
 				   iface->get_name(),
 				   host->getNumIncomingFlows());
@@ -98,19 +98,19 @@ void HostStats::updateStats(const struct timeval *tv) {
     if(score_cli.addObservation(host->getScoreAsClient())) {
       char buf[64];
 
-      ntop->getTrace()->traceEvent(TRACE_NORMAL, "[ANOMALY] %s [%s][client score] [value: %u]",
+      ntop->getTrace()->traceEvent(TRACE_INFO, "[ANOMALY] %s [%s][client score] [value: %u]",
 				   host->get_ip()->print(buf, sizeof(buf)),
 				   iface->get_name(),
 				   host->getScoreAsClient());
       num_anomalies++;
       client_score_anomaly = 1;
     } else
-      server_score_anomaly = 0;
+      client_score_anomaly = 0;
 
     if(score_srv.addObservation(host->getScoreAsServer())) {
       char buf[64];
 
-      ntop->getTrace()->traceEvent(TRACE_NORMAL, "[ANOMALY] %s [%s][server score] [value: %u]",
+      ntop->getTrace()->traceEvent(TRACE_INFO, "[ANOMALY] %s [%s][server score] [value: %u]",
 				   host->get_ip()->print(buf, sizeof(buf)),
 				   iface->get_name(),
 				   host->getScoreAsServer());
@@ -139,9 +139,9 @@ void HostStats::luaActiveFlowsBehaviour(lua_State* vm) {
 
   lua_newtable(vm);
   lua_push_bool_table_entry(vm,  "anomaly",     active_flows_cli.anomalyFound());
-  lua_push_int32_table_entry(vm, "value",       active_flows_cli.getLastValue());
-  lua_push_int32_table_entry(vm, "lower_bound", active_flows_cli.getLastLowerBound());
-  lua_push_int32_table_entry(vm, "upper_bound", active_flows_cli.getLastUpperBound());
+  lua_push_uint64_table_entry(vm, "value",       active_flows_cli.getLastValue());
+  lua_push_uint64_table_entry(vm, "lower_bound", active_flows_cli.getLastLowerBound());
+  lua_push_uint64_table_entry(vm, "upper_bound", active_flows_cli.getLastUpperBound());
 
   lua_pushstring(vm, "as_client");
   lua_insert(vm, -2);
@@ -150,15 +150,15 @@ void HostStats::luaActiveFlowsBehaviour(lua_State* vm) {
   lua_newtable(vm);
 
   lua_push_bool_table_entry(vm,  "anomaly",     active_flows_srv.anomalyFound());
-  lua_push_int32_table_entry(vm, "value",       active_flows_srv.getLastValue());
-  lua_push_int32_table_entry(vm, "lower_bound", active_flows_srv.getLastLowerBound());
-  lua_push_int32_table_entry(vm, "upper_bound", active_flows_srv.getLastUpperBound());
+  lua_push_uint64_table_entry(vm, "value",       active_flows_srv.getLastValue());
+  lua_push_uint64_table_entry(vm, "lower_bound", active_flows_srv.getLastLowerBound());
+  lua_push_uint64_table_entry(vm, "upper_bound", active_flows_srv.getLastUpperBound());
 
   lua_pushstring(vm, "as_server");
   lua_insert(vm, -2);
   lua_settable(vm, -3);
 
-  lua_push_int32_table_entry(vm, "tot_num_anomalies", active_flows_srv.getTotAnomalies() + active_flows_cli.getTotAnomalies());
+  lua_push_uint64_table_entry(vm, "tot_num_anomalies", active_flows_srv.getTotAnomalies() + active_flows_cli.getTotAnomalies());
 
   lua_pushstring(vm, "active_flows_behaviour");
   lua_insert(vm, -2);
@@ -184,9 +184,9 @@ void HostStats::luaScoreBehaviour(lua_State* vm) {
   lua_newtable(vm);
   /* Client score behaviour */
   lua_push_bool_table_entry(vm,  "anomaly",     score_cli.anomalyFound());
-  lua_push_int32_table_entry(vm, "value",       score_cli.getLastValue());
-  lua_push_int32_table_entry(vm, "lower_bound", score_cli.getLastLowerBound());
-  lua_push_int32_table_entry(vm, "upper_bound", score_cli.getLastUpperBound());
+  lua_push_uint64_table_entry(vm, "value",       score_cli.getLastValue());
+  lua_push_uint64_table_entry(vm, "lower_bound", score_cli.getLastLowerBound());
+  lua_push_uint64_table_entry(vm, "upper_bound", score_cli.getLastUpperBound());
 
   lua_pushstring(vm, "as_client");
   lua_insert(vm, -2);
@@ -195,15 +195,15 @@ void HostStats::luaScoreBehaviour(lua_State* vm) {
   lua_newtable(vm);
   /* Server score behaviour */
   lua_push_bool_table_entry(vm,  "anomaly",     score_srv.anomalyFound());
-  lua_push_int32_table_entry(vm, "value",       score_srv.getLastValue());
-  lua_push_int32_table_entry(vm, "lower_bound", score_srv.getLastLowerBound());
-  lua_push_int32_table_entry(vm, "upper_bound", score_srv.getLastUpperBound());
+  lua_push_uint64_table_entry(vm, "value",       score_srv.getLastValue());
+  lua_push_uint64_table_entry(vm, "lower_bound", score_srv.getLastLowerBound());
+  lua_push_uint64_table_entry(vm, "upper_bound", score_srv.getLastUpperBound());
 
   lua_pushstring(vm, "as_server");
   lua_insert(vm, -2);
   lua_settable(vm, -3);
 
-  lua_push_int32_table_entry(vm, "tot_num_anomalies", score_cli.getTotAnomalies() + score_srv.getTotAnomalies());
+  lua_push_uint64_table_entry(vm, "tot_num_anomalies", score_cli.getTotAnomalies() + score_srv.getTotAnomalies());
 
   lua_pushstring(vm, "score_behaviour");
   lua_insert(vm, -2);

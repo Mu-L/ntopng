@@ -13,6 +13,7 @@ end
 require "lua_utils"
 local graph_utils = require "graph_utils"
 local alert_utils = require "alert_utils"
+local tag_utils = require("tag_utils")
 local page_utils = require("page_utils")
 local ts_utils = require("ts_utils")
 local ui_utils = require("ui_utils")
@@ -22,6 +23,8 @@ local auth = require "auth"
 local network        = _GET["network"]
 local network_name   = _GET["network_cidr"]
 local page           = _GET["page"]
+
+local network_behavior_update_freq = 300 -- Seconds
 
 local ifstats = interface.getStats()
 local ifId = ifstats.id
@@ -68,7 +71,7 @@ page_utils.print_navbar(title, nav_url,
 			      hidden = not areAlertsEnabled() or  not auth.has_capability(auth.capabilities.alerts),
 			      active = page == "alerts",
 			      page_name = "alerts",
-			      url = ntop.getHttpPrefix() .. "/lua/alert_stats.lua?&page=network&network_name=" .. network_name .. ",eq",
+			      url = ntop.getHttpPrefix() .. "/lua/alert_stats.lua?&page=network&network_name=" .. network_name .. tag_utils.SEPARATOR .. "eq",
 			      label = "<i class=\"fas fa-exclamation-triangle fa-lg\"></i>",
 			   },
 			   {
@@ -113,10 +116,10 @@ if page == "historical" then
     if ntop.isPro() then
       local pro_timeseries = {
         {schema="subnet:score_anomalies",     label=i18n("graphs.iface_score_anomalies")},
-        {schema="subnet:score_behavior",      label=i18n("graphs.iface_score_behavior"), split_directions = true},
+        {schema="subnet:score_behavior",      label=i18n("graphs.iface_score_behavior"), split_directions = true, first_timeseries_only = true, metrics_labels = {i18n("graphs.score"), i18n("graphs.lower_bound"), i18n("graphs.upper_bound")}},
         {schema="subnet:traffic_anomalies",   label=i18n("graphs.iface_traffic_anomalies")},
-        {schema="subnet:traffic_rx_behavior", label=i18n("graphs.iface_traffic_rx_behavior"), split_directions = true, value_formatter = {"fbits"}},
-        {schema="subnet:traffic_tx_behavior", label=i18n("graphs.iface_traffic_tx_behavior"), split_directions = true, value_formatter = {"fbits"}},
+        {schema="subnet:traffic_rx_behavior_v2", label=i18n("graphs.iface_traffic_rx_behavior"), split_directions = true, first_timeseries_only = true, time_elapsed = network_behavior_update_freq, value_formatter = {"NtopUtils.fbits_from_bytes", "NtopUtils.bytesToSize"}, metrics_labels = {i18n("graphs.traffic_rcvd"), i18n("graphs.lower_bound"), i18n("graphs.upper_bound")}},
+        {schema="subnet:traffic_tx_behavior_v2", label=i18n("graphs.iface_traffic_tx_behavior"), split_directions = true, first_timeseries_only = true, time_elapsed = network_behavior_update_freq,value_formatter = {"NtopUtils.fbits_from_bytes", "NtopUtils.bytesToSize"}, metrics_labels = {i18n("graphs.traffic_sent"), i18n("graphs.lower_bound"), i18n("graphs.upper_bound")}},
       }
       all_timeseries = table.merge(all_timeseries, pro_timeseries)
     end

@@ -27,6 +27,7 @@ MAIL_FROM=""
 MAIL_TO=""
 DISCORD_WEBHOOK=""
 TEST_NAME=""
+API_VERSION=""
 
 DEBUG_LEVEL=0
 KEEP_RUNNING=0
@@ -42,6 +43,7 @@ function usage {
     echo ""
     echo "Options:"
     echo "[-y|--test]=<test>                | Run a selected test"
+    echo "[-v|--api-version]=<version>      | Run a test for the specified Rest API Version (1|2)"
     echo "[-f|--mail-from]=<address>        | Send notifications from the specified email address"
     echo "[-t|--mail-to]=<address>          | Send notifications to the specified email address"
     echo "[-d|--discord-webhook]=<endpoint> | Send notification to the specified Discord endpoint"
@@ -68,6 +70,10 @@ do
 
 	-y=*|--test=*)
 	    TEST_NAME="${i#*=}"
+	    ;;
+
+	-v=*|--api-version=*)
+	    API_VERSION="${i#*=}"
 	    ;;
 
 	-D=*|--debug=*)
@@ -128,11 +134,26 @@ function send_error {
 
         sendError "${TITLE}" "${MESSAGE}" "${FILE_PATH}"
     else
-        echo "[!]  ${TITLE}: ${MESSAGE}"
+        echo "[!] ${TITLE}: ${MESSAGE}"
 
         if [ ! -z "${FILE_PATH}" ]; then
             cat "${FILE_PATH}"
         fi
+    fi
+}
+
+check_connectivity() {
+    URL="https://version.ntop.org"
+    CURL_FAIL_CODE=6
+    CURL_LOG=$(mktemp)
+
+    curl -ksSf "${URL}" > ${CURL_LOG} 2>&1
+
+    if [ ! $? = ${CURL_FAIL_CODE} ]; then
+        echo "[i] Connectivity ok"
+    else
+        send_error "Unable to run tests" "No connectivity, unable to run the tests" "${CURL_LOG}"
+	exit 1
     fi
 }
 
@@ -295,6 +316,9 @@ run_tests() {
     NUM_TESTS=${#TESTS_ARR[@]}
     NUM_SUCCESS=0
 
+    # Check Internet connectivity
+    check_connectivity
+
     if [ ! -f "${NTOPNG_ROOT}/ntopng" ]; then
         send_error "Unable to run tests" "ntopng binary not found, unable to run the tests"
 	exit 1
@@ -407,16 +431,14 @@ run_tests() {
     ntopng_cleanup
 }
 
-run_all_tests() {
-    # Read tests
-    TESTS=`cd tests; /bin/ls *.yaml`
-    run_tests "${TESTS}"
-}
-
-if [ -z "${TEST_NAME}" ]; then
-    run_all_tests
-else
+if [ ! -z "${TEST_NAME}" ]; then
     run_tests "${TEST_NAME}.yaml"
+elif [ ! -z "${API_VERSION}" ]; then
+    TESTS=`cd tests; /bin/ls v${API_VERSION}/*.yaml`
+    run_tests "${TESTS}"
+else
+    TESTS=`cd tests; /bin/ls {v1,v2}/*.yaml`
+    run_tests "${TESTS}"
 fi
 
 exit $RC

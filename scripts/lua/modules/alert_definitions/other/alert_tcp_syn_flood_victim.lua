@@ -15,6 +15,7 @@ local format_utils = require "format_utils"
 local classes = require "classes"
 -- Make sure to import the Superclass!
 local alert = require "alert"
+local alert_entities = require "alert_entities"
 
 -- ##############################################
 
@@ -26,6 +27,9 @@ alert_tcp_syn_flood_victim.meta = {
   alert_key = other_alert_keys.alert_tcp_syn_flood_victim,
   i18n_title = "alerts_dashboard.tcp_syn_flood_victim",
   icon = "fas fa-fw fa-life-ring",
+  entities = {
+    alert_entities.network,
+  },
   has_victim = true,
 }
 
@@ -55,7 +59,6 @@ function alert_tcp_syn_flood_victim.format(ifid, alert, alert_type_params)
   
   return i18n("alert_messages.syn_flood_victim", {
     entity = firstToUpper(entity),
-    host_category = format_utils.formatMainAddressCategory((json.decode(alert.json)).alert_generation.host_info),
     value = string.format("%u", math.ceil(alert_type_params.value)),
     threshold = alert_type_params.threshold,
   })

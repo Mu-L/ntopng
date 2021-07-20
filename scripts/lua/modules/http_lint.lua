@@ -148,13 +148,19 @@ local function validatePort(p)
    end
 
    local n = tonumber(p)
-   if ((n ~= nil) and (n >= 1) and (n <= 65535)) then
+   if ((n ~= nil) and (n >= 0) and (n <= 65535)) then
       return true
    else
       return false
    end
 end
 http_lint.validatePort = validatePort
+
+-- ##############################################
+local function validateASN(p)
+   -- Unique case in which the asn has 'No ASN' as value
+   return (validateNumber(p) or p == "No ASN")
+end
 
 local function validateUnquoted(p)
    -- This function only verifies that value does not contain single quotes, but
@@ -1363,19 +1369,23 @@ local known_parameters = {
    ["network"]                 = validateNumber,  -- A network ID/name
    ["network_name"]            = validateFilters(validateNetwork),
    ["network_cidr"]            = validateNetwork,               -- A network expressed with the /
-   ["ip"]                      = validateEmptyOr(validateFilters(validateHost)), -- An IPv4 or IPv6 address
+   ["ip"]                      = validateEmptyOr(validateListOfTypeInline(validateFilters(validateHost))), -- An IPv4 or IPv6 address
    ["cli_ip"]                  = validateEmptyOr(validateListOfTypeInline(validateFilters(validateHost))), -- An IPv4 or IPv6 address
    ["srv_ip"]                  = validateEmptyOr(validateListOfTypeInline(validateFilters(validateHost))), -- An IPv4 or IPv6 address
    ["cli_port"]                = validateListOfTypeInline(validateFilters(validatePort)),          --Client port
    ["srv_port"]                = validateListOfTypeInline(validateFilters(validatePort)),          --Server port
-   ["cli_asn"]                 = validateListOfTypeInline(validateFilters(validateNumber)),
-   ["srv_asn"]                 = validateListOfTypeInline(validateFilters(validateNumber)),
+   ["cli_asn"]                 = validateListOfTypeInline(validateFilters(validateASN)),
+   ["srv_asn"]                 = validateListOfTypeInline(validateFilters(validateASN)),
+   ["subtype"]                 = validateListOfTypeInline(validateFilters(validateUnquoted)),
    ["tot_pkts"]                = validateFilters(validateNumber),                --Total packtes, used by nindex query
+   ["observation_point_id"]    = validateFilters(validateNumber),                --Observation point ID, used by nindex query
+   ["probe_ip"]                = validateFilters(validateHost),                  --Probe IP, used by nindex query
    ["tot_bytes"]               = validateFilters(validateNumber),                --Total bytes, used by nindex query
    ["src2dst_dscp"]            = validateEmptyOr(validateFilters(validateUnquoted)),                               --Client DSCP, used by nindex query
    ["flow_status_num"]                  = validateEmptyOr(validateFilters(validateUnquoted)),                               --Flow Status, used by nindex query
    ["vhost"]                   = validateHTTPHost,              -- HTTP server name or IP address
    ["version"]                 = validateIpVersion,             -- To specify an IPv4 or IPv6
+   ["ip_version"]              = validateListOfTypeInline(validateFilters(validateIpVersion)),             -- To specify an IPv4 or IPv6
    ["vlan"]                    = validateEmptyOr(validateNumber), -- A VLAN id
    ["hosts"]                   = validateHostsList,             -- A list of hosts
 
@@ -1394,7 +1404,7 @@ local known_parameters = {
    ["category"]                = validateCategory,              -- An nDPI protocol category name
    ["breed"]                   = validateBool,                  -- True if nDPI breed should be shown
    ["ndpi_category"]           = validateBool,                  -- True if nDPI category should be shown
-   ["ndpistats_mode"]          = validateNdpiStatsMode,         -- A mode for rest/v1/get/interface/l7/stats.lua
+   ["ndpistats_mode"]          = validateNdpiStatsMode,         -- A mode for rest/v2/get/interface/l7/stats.lua
    ["l4_proto_id"]             = validateProtocolIdOrName,      -- get_historical_data.lua
    ["l7_proto_id"]             = validateProtocolIdOrName,      -- get_historical_data.lua
    ["l4proto"]                 = validateListOfTypeInline(validateFilters(validateProtocolIdOrName)),      -- An nDPI application protocol ID, layer 4
@@ -1419,7 +1429,7 @@ local known_parameters = {
    ["ifIdx"]                   = validateNumber,                -- A generic switch/router port id
    ["inIfIdx"]                 = validateNumber,                -- A switch/router INPUT port id (%INPUT_SNMP)
    ["outIfIdx"]                = validateNumber,                -- A switch/router OUTPUT port id (%OUTPUT_SNMP)
-   ["deviceIP"]                = validateIPV4,                  -- The switch/router exporter ip address (%EXPORTER_IPV4_ADDRESS)
+   ["deviceIP"]                = validateIPV4,                  -- The switch/router probe ip address (%EXPORTER_IPV4_ADDRESS)
    ["ebpf_data"]               = validateEBPFData,              -- mode for get_username_data.lua and get_process_data.lua
    ["uid"]                     = validateNumber,                -- user id
    ["pid_mode"]                = validatePidMode,               -- pid mode for pid_stats.lua
@@ -1429,7 +1439,7 @@ local known_parameters = {
    ["sflowdistro_mode"]        = validateSflowDistroMode,       -- A mode for host_sflow_distro
    ["distr"]                   = validateSflowDistroType,       -- A type for host_sflow_distro
    ["sflow_filter"]            = validateSflowFilter,           -- sflow host filter
-   ["exporter_ifname"]         = validateSingleWord,            -- an interface name on the exporter system
+   ["exporter_ifname"]         = validateSingleWord,            -- an interface name on the probe system
 
 -- TIME SPECIFICATION
    ["epoch"]                   = validateNumber,                -- A timestamp value
@@ -1487,6 +1497,7 @@ local known_parameters = {
    ["begin_epoch"]             = validateNumber,
    ["end_epoch"]               = validateNumber,
    ["ifid"]                    = validateInterface,             -- An ntopng interface ID
+   ["observationPointId"]      = validateNumber,
    ["ifname"]                  = validateSingleWord,
    ["iffilter"]                = validateIfFilter,              -- An interface ID or 'all'
    ["mode"]                    = validateMode,                  -- Remote or Local users
@@ -1516,16 +1527,17 @@ local known_parameters = {
    ["subdir"]                  = validateSingleWord,            -- A user script subdir
    ["profile"]                 = http_lint.validateTrafficProfile,        -- Traffic Profile name
    ["delete_profile"]          = http_lint.validateTrafficProfile,        -- A Traffic Profile to delete
-   ["alert_id"]                = validateFilters(validateNumber),-- An alert type enum
+   ["alert_id"]                = validateListOfTypeInline(validateFilters(validateNumber)),-- An alert type enum
    ["alert_type"]              = validateNumber,                -- An alert type enum (deprecated: use alert_id)
    ["alert_l7_proto"]          = validateNumber,                -- An alert l7 protocol
    ["alert_subtype"]           = validateSingleWord,            -- An alert subtype string
    ["alert_severity"]          = validateNumber,                -- An alert severity enum
-   ["severity"]                = validateFilters(validateNumber), -- Same as alert_severity
+   ["severity"]                = validateListOfTypeInline(validateFilters(validateNumber)), -- Same as alert_severity
    ["alert_granularity"]       = validateNumber,                -- An alert granularity
    ["entity"]                  = validateNumber,                -- An alert entity type
-   ["role"]                    = validateFilters(validateSingleWord), -- attacker/victim
-   ["roles"]                   = validateFilters(validateSingleWord), -- has_attacker/has_victim
+   ["role"]                    = validateListOfTypeInline(validateFilters(validateSingleWord)), -- attacker/victim
+   ["role_cli_srv"]            = validateListOfTypeInline(validateFilters(validateSingleWord)), -- client/server
+   ["acknowledged"]            = validateListOfTypeInline(validateFilters(validateSingleWord)), -- acknowledged
    ["asn"]                     = validateNumber,                -- An ASN number
    ["module"]                  = validateTopModule,             -- A top script module
    ["step"]                    = validateNumber,                -- A step value
@@ -1541,6 +1553,7 @@ local known_parameters = {
    ["snmp_auth_protocol"]      = validateSnmpAuthProtocol,
    ["snmp_auth_passphrase"]    = validateSingleWord,
    ["snmp_privacy_protocol"]   = validateSnmpPrivacyProtocol,
+   ["observation_point"]       = validateNumber,
    ["snmp_privacy_passphrase"] = validateSingleWord,
    ["lldp_mode"]               = validateBool,                  -- LLDP mode
    ["default_snmp_community"]  = validateSingleWord,            -- Default SNMP community for non-SNMP-configured local hosts
@@ -1664,6 +1677,7 @@ local known_parameters = {
    ["toggle_local_hosts_traffic_rrd_creation"]     = validateBool,
    ["toggle_local_hosts_stats_rrd_creation"]       = validateBool,
    ["toggle_l2_devices_traffic_rrd_creation"]      = validateBool,
+   ["toggle_observation_points_rrd_creation"]     = validateBool,
    ["toggle_system_probes_timeseries"]             = validateBool,
    ["toggle_flow_rrds"]                            = validateBool,
    ["toggle_pools_rrds"]                           = validateBool,

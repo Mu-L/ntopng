@@ -23,6 +23,7 @@
                             <b>{{ i18n("alerts_dashboard.select_filter") }}</b>
                         </label>
                         <div class="col-sm-5">
+                            <input type="hidden" name="index" />
                             <select required name="alert_filter_type" class="form-select" id="alert-filter-type-select">
                                 {% local first_item = true %}
                                 {% for filter_key, filter_type in pairsByField(available_types, 'i18n_label', asc) do %}
@@ -50,11 +51,45 @@
     </div>
 </div>
 
+<template id="ip_version-filter-template">
+    <div class="form-group row">
+        <label class="col-form-label col-sm-3"><b>{{i18n("tags.ip_version")}}</b></label>
+        <div class="col-sm-5">
+            <div class="input-group mb-3">
+                <div class="input-group-prepend">
+                    <select required name="operator" class="form-select">
+                        {% local first_item = true %}
+                        {% for _, operator in ipairs(operators_by_filter.ip_version) do %}
+                            <option {{ (first_item and "selected" or "") }} value="{{operator}}">{{tag_operators[operator]}}</option>
+                            {% first_item = false %}
+                        {% end %}
+                    </select>
+                </div>
+                <select required name="value" class="form-select">
+                    <option selected data-tag-label="{{i18n("ipv4")}}" value="4">{{i18n("ipv4")}}</option>
+                    <option data-tag-label="{{i18n("ipv6")}}" value="6">{{i18n("ipv6")}}</option>
+                </select>
+            </div>
+        </div>
+    </div>
+</template>
+
 <template id="ip-filter-template">
     <div class="form-group row">
         <label class="col-form-label col-sm-3"><b>{{i18n("ip_address")}}</b></label>
         <div class="col-sm-5">
-            <input data-validation-message="{{i18n("invalid_value")}}" data-pattern="ipv4|ipv6" name="value" type="text" class="form-control">
+            <div class="input-group mb-3">
+                <div class="input-group-prepend">
+                    <select required name="operator" class="form-select">
+                        {% local first_item = true %}
+                        {% for _, operator in ipairs(operators_by_filter.ip) do %}
+                            <option {{ (first_item and "selected" or "") }} value="{{operator}}">{{tag_operators[operator]}}</option>
+                            {% first_item = false %}
+                        {% end %}
+                    </select>
+                </div>
+                <input data-validation-message="{{i18n("invalid_value")}}" data-pattern="ipv4|ipv6" name="value" type="text" class="form-control">
+            </div>
         </div>
     </div>
 </template>
@@ -63,7 +98,18 @@
     <div class="form-group row">
         <label class="col-form-label col-sm-3"><b>{{i18n("port")}}</b></label>
         <div class="col-sm-5">
-            <input data-validation-message="{{i18n("invalid_value")}}" data-pattern="port" name="value" type="text" class="form-control">
+            <div class="input-group mb-3">
+                <div class="input-group-prepend">
+                    <select required name="operator" class="form-select">
+                        {% local first_item = true %}
+                        {% for _, operator in ipairs(operators_by_filter.port) do %}
+                            <option {{ (first_item and "selected" or "") }} value="{{operator}}">{{tag_operators[operator]}}</option>
+                            {% first_item = false %}
+                        {% end %}
+                    </select>
+                </div>
+                <input data-validation-message="{{i18n("invalid_value")}}" data-pattern="port" name="value" type="text" class="form-control">
+            </div>
         </div>
     </div>
 </template>
@@ -76,7 +122,7 @@
                 <div class="input-group-prepend">
                     <select required name="operator" class="form-select">
                         {% local first_item = true %}
-                        {% for _, operator in ipairs(severity_operators) do %}
+                        {% for _, operator in ipairs(operators_by_filter.severity) do %}
                             <option {{ (first_item and "selected" or "") }} value="{{operator}}">{{tag_operators[operator]}}</option>
                             {% first_item = false %}
                         {% end %}
@@ -102,15 +148,26 @@
     <div class="form-group row">
         <label class="col-form-label col-sm-3"><b>{{i18n("alerts_dashboard.alert_type")}}</b></label>
         <div class="col-sm-5">
-            <select required name="value" class="form-select">
-               {% local first_item = true %}
-               {% for _, alert_type in pairsByValues(alert_types, alert_consts.alert_type_info_asc) do %}
-                  <option {{ (first_item and "selected" or "") }} data-tag-label="{{ alert_type.label }}" value="{{ alert_type.alert_id }}">
-                     {{ alert_type.label }}
-                  </option>
-                  {% first_item = false %}
-               {% end %}
-            </select>
+            <div class="input-group mb-3">
+                <div class="input-group-prepend">
+                    <select required name="operator" class="form-select">
+                        {% local first_item = true %}
+                        {% for _, operator in ipairs(operators_by_filter.alert_id) do %}
+                            <option {{ (first_item and "selected" or "") }} value="{{operator}}">{{tag_operators[operator]}}</option>
+                            {% first_item = false %}
+                        {% end %}
+                    </select>
+                </div>
+                <select required name="value" class="form-select">
+                   {% local first_item = true %}
+                   {% for _, alert_type in pairsByValues(alert_types, alert_consts.alert_type_info_asc) do %}
+                      <option {{ (first_item and "selected" or "") }} data-tag-label="{{ alert_type.label }}" value="{{ alert_type.alert_id }}">
+                         {{ alert_type.label }}
+                      </option>
+                      {% first_item = false %}
+                  {% end %}
+                </select>
+            </div>
         </div>
     </div>
 </template>
@@ -119,15 +176,26 @@
     <div class="form-group row">
         <label class="col-form-label col-sm-3"><b>{{i18n("tags.l7proto")}}</b></label>
         <div class="col-sm-5">
-            <select required name="value" class="form-select">
-               {% local first_item = true %}
-               {% for name, id in pairsByKeys(l7_protocols, asc) do %}
-                  <option {{ (first_item and "selected" or "") }} data-tag-label="{{ name }}" value="{{ id }}">
-                     {{ name }}
-                  </option>
-                  {% first_item = false %}
-               {% end %}
-            </select>
+            <div class="input-group mb-3">
+                <div class="input-group-prepend">
+                    <select required name="operator" class="form-select">
+                        {% local first_item = true %}
+                        {% for _, operator in ipairs(operators_by_filter.l7_proto) do %}
+                            <option {{ (first_item and "selected" or "") }} value="{{operator}}">{{tag_operators[operator]}}</option>
+                            {% first_item = false %}
+                        {% end %}
+                    </select>
+                </div>
+                <select required name="value" class="form-select">
+                   {% local first_item = true %}
+                   {% for name, id in pairsByKeys(l7_protocols, asc) do %}
+                      <option {{ (first_item and "selected" or "") }} data-tag-label="{{ name }}" value="{{ id }}">
+                         {{ name }}
+                      </option>
+                      {% first_item = false %}
+                   {% end %}
+                </select>
+            </div>
         </div>
     </div>
 </template>
@@ -136,23 +204,65 @@
     <div class="form-group row">
         <label class="col-form-label col-sm-3"><b>{{i18n("tags.role")}}</b></label>
         <div class="col-sm-5">
-            <select required name="value" class="form-select">
-                <option selected data-tag-label="{{i18n("attacker")}}" value="attacker">{{i18n("attacker")}}</option>
-                <option data-tag-label="{{i18n("victim")}}" value="victim">{{i18n("victim")}}</option>
-            </select>
+            <div class="input-group mb-3">
+                <div class="input-group-prepend">
+                    <select required name="operator" class="form-select">
+                        {% local first_item = true %}
+                        {% for _, operator in ipairs(operators_by_filter.role) do %}
+                            <option {{ (first_item and "selected" or "") }} value="{{operator}}">{{tag_operators[operator]}}</option>
+                            {% first_item = false %}
+                        {% end %}
+                    </select>
+                </div>
+                <select required name="value" class="form-select">
+                    <option selected data-tag-label="{{i18n("attacker")}}" value="attacker">{{i18n("attacker")}}</option>
+                    <option data-tag-label="{{i18n("victim")}}" value="victim">{{i18n("victim")}}</option>
+		    <option data-tag-label="{{i18n("no_attacker_no_victim")}}" value="no_attacker_no_victim">{{i18n("no_attacker_no_victim")}}</option>
+                </select>
+            </div>
         </div>
     </div>
 </template>
 
-<template id="roles-filter-template">
+<template id="role_cli_srv-filter-template">
     <div class="form-group row">
-        <label class="col-form-label col-sm-3"><b>{{i18n("tags.roles")}}</b></label>
+        <label class="col-form-label col-sm-3"><b>{{i18n("tags.role_cli_srv")}}</b></label>
         <div class="col-sm-5">
-            <select required name="value" class="form-select">
-                <option selected data-tag-label="{{i18n("has_attacker")}}" value="has_attacker">{{i18n("has_attacker")}}</option>
-                <option data-tag-label="{{i18n("has_victim")}}" value="has_victim">{{i18n("has_victim")}}</option>
-                <option data-tag-label="{{i18n("no_attacker_nor_victim")}}" value="no_attacker_nor_victim">{{i18n("no_attacker_nor_victim")}}</option>
-            </select>
+            <div class="input-group mb-3">
+                <div class="input-group-prepend">
+                    <select required name="operator" class="form-select">
+                        {% local first_item = true %}
+                        {% for _, operator in ipairs(operators_by_filter.role_cli_srv) do %}
+                            <option {{ (first_item and "selected" or "") }} value="{{operator}}">{{tag_operators[operator]}}</option>
+                            {% first_item = false %}
+                        {% end %}
+                    </select>
+                </div>
+                <select required name="value" class="form-select">
+                    <option selected data-tag-label="{{i18n("client")}}" value="client">{{i18n("client")}}</option>
+                    <option data-tag-label="{{i18n("server")}}" value="server">{{i18n("server")}}</option>
+                </select>
+            </div>
+        </div>
+    </div>
+</template>
+
+<template id="text-filter-template">
+    <div class="form-group row">
+        <label class="col-form-label col-sm-3"><b>{{i18n("value")}}</b></label>
+        <div class="col-sm-5">
+            <div class="input-group mb-3">
+                <div class="input-group-prepend">
+                    <select required name="operator" class="form-select">
+                        {% local first_item = true %}
+                        {% for _, operator in ipairs(operators_by_filter.text) do %}
+                            <option {{ (first_item and "selected" or "") }} value="{{operator}}">{{tag_operators[operator]}}</option>
+                            {% first_item = false %}
+                        {% end %}
+                    </select>
+                </div>
+                <input data-validation-message="{{i18n("invalid_value")}}" name="value" type="text" class="form-control">
+            </div>
         </div>
     </div>
 </template>

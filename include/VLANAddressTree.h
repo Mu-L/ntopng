@@ -26,18 +26,18 @@ class AddressTree;
 
 /*
 typedef struct {
-  // u_int32_t vlan_id:12, observation_domain_id:20;
+  // u_int32_t vlan_id:16, observation_point_id:16;
 } VLANid; 
 */
 
-/* 
-   vlan_id:               lower 12 bits
-   observation_domain_id: upper 20 bits
- */
-typedef u_int32_t VLANid;
+/*
+  VLANId is 12 bits but in order to avoid breaking bytes
+  boundaries we assign 16 bits each
+*/
+typedef u_int16_t VLANid;
 
-inline u_int16_t filterVLANid(VLANid id)              { return((u_int16_t)(id & 0xFFF)); }
-inline u_int32_t filterObservationDomainId(VLANid id) { return((id >> 12) & 0xFFFFF);    }
+/* Make sure we won't exceed 12 bites for vlanId */
+inline u_int16_t filterVLANid(VLANid id)             { return((u_int16_t)(id & 0xFFF)); }
 
 class VLANAddressTree {
  protected:

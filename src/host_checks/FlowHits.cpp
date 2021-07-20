@@ -24,18 +24,18 @@
 
 /* ***************************************************** */
 
-FlowHits::FlowHits() : HostCheck(ntopng_edition_community) {
+FlowHits::FlowHits() : HostCheck(ntopng_edition_community, false /* All interfaces */, false /* Don't exclude for nEdge */, false /* NOT only for nEdge */) {
   threshold = (u_int64_t)-1;
 };
 
 /* ***************************************************** */
 
 void FlowHits::triggerFlowHitsAlert(Host *h, HostAlert *engaged, bool attacker,
-    u_int16_t hits, u_int64_t threshold, u_int8_t cli_score, u_int8_t srv_score) {
+    u_int16_t hits, u_int64_t threshold, risk_percentage cli_pctg) {
   FlowHitsAlert *alert = static_cast<FlowHitsAlert*>(engaged);
 
   if (!alert) {
-    alert = allocAlert(h, cli_score, srv_score, hits, threshold, attacker);
+    alert = allocAlert(h, cli_pctg, hits, threshold, attacker);
     if(attacker)
       alert->setAttacker();
     else
@@ -48,12 +48,11 @@ void FlowHits::triggerFlowHitsAlert(Host *h, HostAlert *engaged, bool attacker,
     */
     if(alert->isAttacker() == attacker) { 
       /* Update engaged alert */
-      
       alert->setHits(hits);
     }
   }
 
-  if (alert)
+  if(alert)
     h->triggerAlert(alert);
 }
 

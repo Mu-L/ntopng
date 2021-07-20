@@ -204,7 +204,7 @@ function alert_utils.drawAlertPCAPDownloadDialog(ifid)
 
    function submitPcapDownload(form) {
      var frm = $('#'+form.id);
-     window.open(']] print(ntop.getHttpPrefix()) print [[/lua/rest/v1/get/pcap/live_extraction.lua?' + frm.serialize(), '_self', false);
+     window.open(']] print(ntop.getHttpPrefix()) print [[/lua/rest/v2/get/pcap/live_extraction.lua?' + frm.serialize(), '_self', false);
      $('#]] print(modalID) print [[').modal('hide');
      return false;
    }
@@ -395,7 +395,7 @@ end
 -- #################################
 
 function alert_utils.disableAlertsGeneration()
-   if not haveAdminPrivileges() then
+   if not isAdministratorOrPrintErr() then
       return
    end
 
@@ -407,17 +407,27 @@ end
 -- #################################
 
 local function alertNotificationActionToLabel(action, use_emoji)
-   local label = "["
+   local label = ""
 
    if action == "engage" then
+      label = "["
       if(use_emoji) then label = label .."\xE2\x9D\x97 " end
-      label = label .. "Engaged]"
+      label = label .. "Engaged"
+      label = label .. "]"
    elseif action == "release" then
+      label = "["
       if(use_emoji) then label = label .."\xE2\x9C\x94 " end
-      label = label .. "Released]"
+      label = label .. "Released"
+      label = label .. "]"
    end
 
    return label
+end
+
+-- #################################
+
+function alert_utils.getConfigsetURL(script_key, subdir)
+   return string.format('%s/lua/admin/edit_configset.lua?subdir=%s&check=%s#all', ntop.getHttpPrefix(), subdir, script_key)
 end
 
 -- #################################
@@ -428,22 +438,21 @@ function alert_utils.getConfigsetAlertLink(alert_json, alert --[[ optional --]])
    if(info and isAdministrator()) then
 
       if alert then
-         -- This piece of code (exception) has been moved here from formatAlertMessage
-         if(alert_consts.getAlertType(alert.alert_id, alert.entity_id) == "alert_am_threshold_cross") then
-            local plugins_utils = require "plugins_utils"
-            local active_monitoring_utils = plugins_utils.loadModule("active_monitoring", "am_utils")
-            local host = json.decode(alert.json)["host"]
+	 -- This piece of code (exception) has been moved here from formatAlertMessage
+	 if(alert_consts.getAlertType(alert.alert_id, alert.entity_id) == "alert_am_threshold_cross") then
+	    local plugins_utils = require "plugins_utils"
+	    local active_monitoring_utils = plugins_utils.loadModule("active_monitoring", "am_utils")
+	    local host = json.decode(alert.json)["host"]
 
-            if host and host.measurement and not host.is_infrastructure then
- 	       return ' <a href="'.. ntop.getHttpPrefix() ..'/plugins/active_monitoring_stats.lua?am_host='
-               .. host.host .. '&measurement='.. host.measurement ..'&page=overview"><i class="fas fa-cog" title="'.. i18n("edit_configuration") ..'"></i></a>'
-            end
-         end
+	    if host and host.measurement and not host.is_infrastructure then
+	       return ' <a href="'.. ntop.getHttpPrefix() ..'/plugins/active_monitoring_stats.lua?am_host='
+		  .. host.host .. '&measurement='.. host.measurement ..'&page=overview"><i class="fas fa-cog" title="'.. i18n("edit_configuration") ..'"></i></a>'
+	    end
+	 end
       end
 
-      return(' <a href="'.. ntop.getHttpPrefix() ..'/lua/admin/edit_configset.lua?'..
-	    'subdir='.. info.subdir ..'&check='.. info.script_key ..'#all">'..
-	    '<i class="fas fa-cog" title="'.. i18n("edit_configuration") ..'"></i></a>')
+      return(' <a href="'..alert_utils.getConfigsetURL(info.script_key, info.subdir)..'">'..
+		'<i class="fas fa-cog" title="'.. i18n("edit_configuration") ..'"></i></a>')
    end
 
    return('')
@@ -490,6 +499,10 @@ function alert_utils.formatAlertMessage(ifid, alert, alert_json, skip_live_data)
     msg = alert_consts.alertTypeLabel(tonumber(alert.alert_id), true --[[ no_html --]], alert.entity_id)
   end
 
+  if not isEmptyString(alert["user_label"]) then
+     msg = string.format('%s <small><span class="text-muted">%s</span></small>', msg, alert["user_label"])
+  end
+
   return(msg or "")
 end
 
@@ -514,6 +527,10 @@ function alert_utils.formatFlowAlertMessage(ifid, alert, alert_json, skip_live_d
 
   if isEmptyString(msg) then
     msg = alert_consts.alertTypeLabel(tonumber(alert.alert_id), true --[[ no_html --]], alert_entities.flow.entity_id)
+  end
+
+  if not isEmptyString(alert["user_label"]) then
+     msg = string.format('%s <small><span class="text-muted">%s</span></small>', msg, alert["user_label"])
   end
 
   return msg or ""
@@ -777,23 +794,44 @@ function alert_utils.notify_ntopng_stop()
    return(notify_ntopng_status(false))
 end
 
-function alert_utils.formatBehaviorAlert(params, anomalies, stats, id, subtype)
-   -- Cycle throught the behavior stats
-   for anomaly_type, anomaly in pairs(anomalies) do
-      local alert = alert_consts.alert_types.alert_behavior_anomaly.new(
-         i18n(subtype .. "_id", {id = id}),
-         i18n("alert_behaviors." .. anomaly_type),
-         stats[anomaly_type]["value"],
-         stats[anomaly_type]["lower_bound"],
-         stats[anomaly_type]["upper_bound"]
-      )
+-- #####################################
 
+function alert_utils.formatBehaviorAlert(params, anomalies, stats, id, subtype, name)
+   -- Cycle throught the behavior stats
+   for anomaly_type, anomaly_table in pairs(anomalies) do
+      local lower_bound = stats[anomaly_type]["lower_bound"]
+      local upper_bound = stats[anomaly_type]["upper_bound"]
+      local value = stats[anomaly_type]["value"]
+      
+      if anomaly_table["cut_values"] then
+         value = tonumber(string.format("%.2f", tonumber(value * (anomaly_table["multiplier"] or 1))))
+         lower_bound = tonumber(string.format("%.2f", tonumber(lower_bound * (anomaly_table["multiplier"] or 1))))
+         upper_bound = tonumber(string.format("%.2f", tonumber(upper_bound * (anomaly_table["multiplier"] or 1))))
+      end
+
+      if anomaly_table["formatter"] then
+         value = anomaly_table["formatter"](value)
+         lower_bound = anomaly_table["formatter"](lower_bound)
+         upper_bound = anomaly_table["formatter"](upper_bound)
+      end
+ 
+      local alert = alert_consts.alert_types.alert_behavior_anomaly.new(
+         i18n(subtype .. "_id", {id = name or id}),
+         anomaly_type,
+         value,
+         lower_bound,
+         upper_bound,
+         anomaly_table["entity_id"],
+         id,
+         anomaly_table["extra_params"]
+      )
+ 
       alert:set_score_warning()
       alert:set_granularity(params.granularity)
-      alert:set_subtype(subtype .. "_" .. id)
+      alert:set_subtype(name)
 
       -- Trigger an alert if an anomaly is found
-      if anomaly == true then
+      if anomaly_table["anomaly"] == true then
          alert:trigger(params.alert_entity, nil, params.cur_alerts)
       else
          alert:release(params.alert_entity, nil, params.cur_alerts)

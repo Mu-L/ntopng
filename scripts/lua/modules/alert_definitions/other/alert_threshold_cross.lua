@@ -14,6 +14,8 @@ local format_utils = require "format_utils"
 local classes = require "classes"
 -- Make sure to import the Superclass!
 local alert = require "alert"
+local alert_entities = require "alert_entities"
+local alert_entities = require "alert_entities"
 
 -- ##############################################
 
@@ -25,6 +27,12 @@ alert_threshold_cross.meta = {
   alert_key = other_alert_keys.alert_threshold_cross,
   i18n_title = "alerts_dashboard.threashold_cross",
   icon = "fas fa-fw fa-arrow-circle-up",
+entities = {},
+  entities = {
+    alert_entities.interface,
+    alert_entities.network,
+    alert_entities.host_pool,
+  }
 }
 
 -- ##############################################
@@ -58,7 +66,6 @@ function alert_threshold_cross.format(ifid, alert, alert_type_params)
     granularity = engine_label,
     metric = alert_type_params.metric,
     entity = entity,
-    host_category = format_utils.formatMainAddressCategory((json.decode(alert.json)).alert_generation.host_info),
     value = format_utils.formatValue(alert_type_params.value),
     op = "&".. (alert_type_params.operator or "gt") ..";",
     threshold = format_utils.formatValue(alert_type_params.threshold),

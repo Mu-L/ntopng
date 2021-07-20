@@ -52,10 +52,12 @@ class ViewInterface : public NetworkInterface {
   /* Dequeues enqueued flows sequentially for each of the viewed interfaces belonging to this view.
      The total number of elements dequeued is returned. */
   u_int64_t viewDequeue(u_int budget);
+  virtual bool areTrafficDirectionsSupported() { return(true); };
   virtual InterfaceType getIfType() const { return interface_type_VIEW;           };
   virtual const char* get_type()    const { return CONST_INTERFACE_TYPE_VIEW;     };
   virtual bool is_ndpi_enabled()    const { return false;                         };
   virtual bool isPacketInterface()  const { return is_packet_interface;           };
+  virtual bool isSampledTraffic()   const;
   void flowPollLoop();
   void startPacketPolling();
   bool set_packet_filter(char *filter)    { return false ;                        };
@@ -71,6 +73,7 @@ class ViewInterface : public NetworkInterface {
   virtual u_int64_t getNumNewFlows();
   virtual u_int     getNumFlows();
   virtual u_int64_t getNumActiveAlertedFlows() const;
+  virtual u_int64_t getNumActiveAlertedFlows(AlertLevelGroup alert_level_group) const;
 
   virtual u_int64_t getCheckPointNumPackets();
   virtual u_int64_t getCheckPointDroppedAlerts();
@@ -85,6 +88,7 @@ class ViewInterface : public NetworkInterface {
   virtual u_int32_t getFlowsHashSize();
   virtual Flow* findFlowByKeyAndHashId(u_int32_t key, u_int hash_id, AddressTree *allowed_hosts);
   virtual Flow* findFlowByTuple(VLANid vlan_id,
+				u_int16_t observation_domain_id,
   				IpAddress *src_ip,  IpAddress *dst_ip,
   				u_int16_t src_port, u_int16_t dst_port,
 				u_int8_t l4_proto,

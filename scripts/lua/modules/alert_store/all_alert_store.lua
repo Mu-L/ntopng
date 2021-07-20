@@ -47,6 +47,12 @@ end
 
 -- ##############################################
 
+function all_alert_store:acknowledge()
+   traceError(TRACE_ERROR, TRACE_CONSOLE, "Unsupported!")
+end
+
+-- ##############################################
+
 --@brief Selects engaged alerts from memory
 --@return Selected engaged alerts, and the total number of engaged alerts
 function alert_store:select_engaged(filter)
@@ -148,7 +154,7 @@ function all_alert_store:select_historical(filter, fields)
       return res
    end
 
-   where_clause = table.concat(self._where, " AND ")
+   where_clause = self:build_where_clause()
 
    -- [OPTIONAL] Add sort criteria
    if self._order_by then
@@ -201,7 +207,7 @@ function all_alert_store:select_request(filter, select_fields)
    -- Add limits and sort criteria
    self:add_request_ranges()
 
-   if self._engaged then -- Engaged
+   if self._status == alert_consts.alert_status.engaged.alert_status_id then -- Engaged
       local alerts, total_rows =  self:select_engaged(filter)
 
       return alerts, total_rows

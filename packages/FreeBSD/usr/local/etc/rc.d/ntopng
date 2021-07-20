@@ -23,16 +23,19 @@ rcvar=ntopng_enable
 load_rc_config $name
 
 : ${ntopng_enable:=NO}
-: ${ntopng_pidfile:=/var/run/ntopng/ntopng.pid}
+: ${ntopng_pidfile:=/var/run/ntopng.pid}
+: ${ntopng_config:=/usr/local/etc/ntopng.conf}
 
 start_precmd=ntopng_precmd
-command=/usr/local/bin/ntopng
-command_args="-G ${ntopng_pidfile} -e"
+command="/usr/local/bin/ntopng"
+pidfile=${ntopng_pidfile}
+required_files=${ntopng_config}
+command_args="${ntopng_config} -G ${ntopng_pidfile} -e"
 
 ntopng_precmd()
 {
     local ntopng_user="ntopng"
-    local ntopng_conf="/usr/local/etc/ntopng.conf"
+    local ntopng_conf=${ntopng_config}
     local ntopng_datadir="/var/db/ntopng-enterprise"
     local rundir=${ntopng_pidfile%/*}
 

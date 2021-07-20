@@ -444,7 +444,7 @@ function printGUI()
   multipleTableButtonPrefs(subpage_active.entries[label].title,
 			   subpage_active.entries[label].description,
 			   t_labels, t_values, "default", "primary",
-			   label, "ntopng.prefs.theme")
+			   label, "ntopng.user." .. _SESSION["user"] .. ".theme")
 
   -- ######################
 
@@ -496,7 +496,7 @@ function printMisc()
 
   -- ######################
 
-  if(haveAdminPrivileges()) then
+  if(isAdministratorOrPrintErr()) then
      print('<thead class="table-primary"><tr><th colspan=2 class="info">'..i18n("hosts")..'</th></tr></thead>')
 
      local h_labels = {i18n("prefs.no_host_mask"), i18n("prefs.local_host_mask"), i18n("prefs.remote_host_mask")}
@@ -762,13 +762,14 @@ function printNetworkBehaviour()
 
    -- ######################
 
-   print('<thead class="table-primary"><tr><th colspan=2 class="info">'..i18n("prefs.behaviour")..'</th></tr></thead>')
-
+   print('<thead class="table-primary"><tr><th colspan=2 class="info">'..i18n("prefs.traffic_behaviour")..'</th></tr></thead>')
+   -- Behavior analysis for asn, network and l7proto (iface)
+ 
    prefsToggleButton(subpage_active, {
 			field = "toggle_behaviour_analysis",
 			default = "0",
 			pref = "is_behaviour_analysis_enabled", -- redis preference
-			to_switch = {"learning-status-thead", "behaviour_analysis_learning_period", "row_behaviour_analysis_learning_status_during_learning", "row_behaviour_analysis_learning_status_post_learning", "iec60870_learning_period"},
+			to_switch = {"learning-status-thead", "behaviour_analysis_learning_period", "row_behaviour_analysis_learning_status_during_learning", "row_behaviour_analysis_learning_status_post_learning"},
    })
 
    local is_behaviour_analysis_enabled = ntop.getPref("ntopng.prefs.is_behaviour_analysis_enabled") == "1"
@@ -1500,4 +1501,4 @@ aysHandleForm("form", {
 $("form[id!='search-host-form']").validator({disable:true});
 </script>]])
 
-end --[[ haveAdminPrivileges ]]
+end --[[ isAdministratorOrPrintErr ]]

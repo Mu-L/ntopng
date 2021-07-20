@@ -89,6 +89,27 @@ alert_consts.alerts_granularities = {
 
 -- ################################################################################
 
+-- This status is written inside SQLite column `alert_status`
+alert_consts.alert_status = {
+   ["historical"] = {
+      -- Default for alerts written to the database
+      alert_status_id = 0,
+   },
+   ["acknowledged"] = {
+      -- Alerts acknowledged
+      alert_status_id = 1,
+   },
+   ["engaged"] = {
+      -- Not used yet. Will be possibly used when managing engaged alerts inside sqlite
+      alert_status_id = 2,
+   },
+   ["any"] = {
+      alert_status_id = 3,
+   },
+}
+
+-- ################################################################################
+
 alert_consts.ids_rule_maker = {
   GPL = "GPL",
   SURICATA = "Suricata",
@@ -398,6 +419,18 @@ function loadDefinition(def_script, mod_fname, script_path)
    end
    alerts_by_id[alert_entity_id][alert_key] = mod_fname
 
+   -- Handle 'other' alerts
+   -- Note: some are used by multiple entities, defined under
+   -- meta in the alert definition
+   if def_script.meta['entities'] then
+      for _, entity in ipairs(def_script.meta['entities']) do
+         if not alerts_by_id[entity.entity_id] then
+            alerts_by_id[entity.entity_id] = {}
+         end
+         alerts_by_id[entity.entity_id][alert_key] = mod_fname
+      end
+   end
+
    -- Success
    return(true)
 end
@@ -415,7 +448,7 @@ function alert_consts.alertTypeLabel(alert_id, nohtml, alert_entity_id)
       if(nohtml) then
         return(title)
       else
-        return(string.format('<i class="%s"></i> %s', type_info.icon or type_info.meta.icon, title))
+        return(string.format('<i class="%s"></i> %s', type_info.icon or type_info.meta.icon, shortenString(title)))
       end
    end
 
@@ -463,7 +496,7 @@ function alert_consts.getAlertType(alert_key, alert_entity_id)
    alert_key = tonumber(alert_key)
    alert_entity_id = tonumber(alert_entity_id)
 
-   if alert_entity_id and alerts_by_id[alert_entity_id] then
+   if alert_entity_id and alerts_by_id[alert_entity_id] and alerts_by_id[alert_entity_id][alert_key] then
       return alerts_by_id[alert_entity_id][alert_key]
    end
 

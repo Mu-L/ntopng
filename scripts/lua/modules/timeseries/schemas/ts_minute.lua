@@ -289,9 +289,14 @@ schema:addMetric("srv_score")
 
 -- ##############################################
 
-schema = ts_utils.newSchema("iface:alerts_stats", {step=60, metrics_type=ts_utils.metrics.gauge, is_critical_ts = true})
+schema = ts_utils.newSchema("iface:engaged_alerts", {step=60, metrics_type=ts_utils.metrics.gauge, is_critical_ts = true})
 schema:addTag("ifid")
 schema:addMetric("engaged_alerts")
+
+-- ##############################################
+
+schema = ts_utils.newSchema("iface:dropped_alerts", {step=60, is_critical_ts = true})
+schema:addTag("ifid")
 schema:addMetric("dropped_alerts")
 
 -- ##############################################
@@ -358,3 +363,17 @@ schema:addTag("ifid")
 schema:addTag("pod")
 schema:addMetric("as_client")
 schema:addMetric("as_server")
+
+-------------------------------------------------------
+-- NPROBE OBSERVATION POINTS SCHEMAS
+-------------------------------------------------------
+
+schema = ts_utils.newSchema("observation_point:traffic", {step=60})
+schema:addTag("ifid")
+schema:addTag("observation_point_id")
+schema:addMetric("bytes")
+
+schema = ts_utils.newSchema("observation_point:flows", {step=60})
+schema:addTag("ifid")
+schema:addTag("observation_point_id")
+schema:addMetric("flows")

@@ -81,7 +81,7 @@ class NetworkInterface : public NetworkInterfaceAlertableEntity {
   std::atomic<u_int64_t> num_active_alerted_flows_notice;  /* Counts all flow alerts with severity <= notice  */
   std::atomic<u_int64_t> num_active_alerted_flows_warning; /* Counts all flow alerts with severity == warning */
   std::atomic<u_int64_t> num_active_alerted_flows_error;   /* Counts all flow alerts with severity >= error   */
-  u_int32_t num_dropped_alerts, prev_dropped_alerts, checked_dropped_alerts;
+  u_int32_t num_host_dropped_alerts, num_flow_dropped_alerts, num_other_dropped_alerts;
   u_int64_t num_written_alerts, num_alerts_queries, score_as_cli, score_as_srv;
   u_int64_t num_new_flows;
   struct {
@@ -138,6 +138,9 @@ class NetworkInterface : public NetworkInterfaceAlertableEntity {
   /* Queue containing the ip@vlan strings of the hosts to restore. */
   StringFifoQueue *hosts_to_restore;
 
+  RwLock observationLock;
+  std::map<u_int16_t /* observationPointId */, ObservationPointIdTrafficStats*> observationPoints;
+  
   /* External alerts contain alertable entities other than host/interface/network
    * which are dynamically allocated when an alert for them occurs.
    * A lock is necessary to guard the insert/delete operations from lookup operations
@@ -255,7 +258,7 @@ class NetworkInterface : public NetworkInterfaceAlertableEntity {
   CountriesHash *countries_hash;
 
   /* VLANs */
-  VLANHash *vlans_hash; /**< Hash used to store Vlans information. */
+  VLANHash *vlans_hash; /**< Hash used to store VLAN information. */
 
   /* Hosts */
   HostHash *hosts_hash; /**< Hash used to store hosts information. */
@@ -281,6 +284,7 @@ class NetworkInterface : public NetworkInterfaceAlertableEntity {
 
   NetworkInterface* getDynInterface(u_int64_t criteria, bool parser_interface);
   Flow* getFlow(Mac *srcMac, Mac *dstMac, VLANid vlan_id,
+		u_int16_t observation_domain_id,
 		u_int32_t deviceIP, u_int32_t inIndex, u_int32_t outIndex,
 		const ICMPinfo * const icmp_info,
 		IpAddress *src_ip, IpAddress *dst_ip,
@@ -513,12 +517,15 @@ class NetworkInterface : public NetworkInterfaceAlertableEntity {
   inline void incFlagStats(u_int8_t flags, bool cumulative_flags) {
     pktStats.incFlagStats(flags, cumulative_flags);
   };
-  inline void _incStats(bool ingressPacket, time_t when,
+
+  inline void incStats(bool ingressPacket, time_t when,
 			u_int16_t eth_proto,
 			u_int16_t ndpi_proto, ndpi_protocol_category_t ndpi_category,
 			u_int8_t l4proto,
-			u_int pkt_len, u_int num_pkts, u_int pkt_overhead) {
-    incEthStats(ingressPacket, eth_proto, num_pkts, pkt_len, pkt_overhead);
+			u_int32_t pkt_len, u_int32_t num_pkts) {
+    /* NOTE: nEdge does the incs in NetfilterInterface::incStatsConntrack, keep it in sync! */
+#ifndef HAVE_NEDGE
+    incEthStats(ingressPacket, eth_proto, num_pkts, pkt_len, getPacketOverhead());
     ndpiStats->incStats(when, ndpi_proto, 0, 0, num_pkts, pkt_len);
     // Note: here we are not currently interested in packet direction, so we tell it is receive
     ndpiStats->incCategoryStats(when, ndpi_category, 0 /* see above comment */, pkt_len);
@@ -526,16 +533,7 @@ class NetworkInterface : public NetworkInterfaceAlertableEntity {
     l4Stats.incStats(when, l4proto,
 		     ingressPacket ? num_pkts : 0, ingressPacket ? pkt_len : 0,
 		     !ingressPacket ? num_pkts : 0, !ingressPacket ? pkt_len : 0);
-  };
-  inline void incStats(bool ingressPacket, time_t when, u_int16_t eth_proto,
-		       u_int16_t ndpi_proto, ndpi_protocol_category_t ndpi_category,
-		       u_int8_t l4proto, u_int pkt_len, u_int num_pkts) {
-#ifdef HAVE_NEDGE
-    /* In nedge, we only update the stats periodically with conntrack */
-    return;
 #endif
-    u_int pkt_overhead = getPacketOverhead();
-    _incStats(ingressPacket, when, eth_proto, ndpi_proto, ndpi_category, l4proto, pkt_len, num_pkts, pkt_overhead);
   };
 
   inline void incICMPStats(bool is_icmpv6, u_int32_t num_pkts, u_int8_t icmp_type, u_int8_t icmp_code, bool sent) {
@@ -577,11 +575,12 @@ class NetworkInterface : public NetworkInterfaceAlertableEntity {
   bool restoreHost(char *host_ip, VLANid vlan_id);
   void checkHostsToRestore();
   u_int printAvailableInterfaces(bool printHelp, int idx, char *ifname, u_int ifname_len);
-  void findFlowHosts(VLANid vlan_id,
+  void findFlowHosts(VLANid vlan_id, u_int16_t observation_domain_id,
 		     Mac *src_mac, IpAddress *_src_ip, Host **src,
 		     Mac *dst_mac, IpAddress *_dst_ip, Host **dst);
   virtual Flow* findFlowByKeyAndHashId(u_int32_t key, u_int hash_id, AddressTree *allowed_hosts);
   virtual Flow* findFlowByTuple(VLANid vlan_id,
+				u_int16_t observation_domain_id,
 				IpAddress *src_ip,  IpAddress *dst_ip,
 				u_int16_t src_port, u_int16_t dst_port,
 				u_int8_t l4_proto,
@@ -623,7 +622,7 @@ class NetworkInterface : public NetworkInterfaceAlertableEntity {
   void luaScore(lua_State* vm);
   void luaAlertedFlows(lua_State* vm);
   void luaAnomalies(lua_State* vm);
-  void luaNdpiStats(lua_State* vm);
+  void luaNdpiStats(lua_State* vm, bool diff = false);
   void luaPeriodicityFilteringMenu(lua_State* vm);
   void luaServiceFilteringMenu(lua_State* vm);
   void luaPeriodicityStats(lua_State* vm, IpAddress *ip_address, VLANid vlan_id, u_int16_t host_pool_id, 
@@ -666,7 +665,7 @@ class NetworkInterface : public NetworkInterfaceAlertableEntity {
 			 const AddressTree * const cidr_filter,
 			 char *sortColumn, u_int32_t maxHits,
 			 u_int32_t toSkip, bool a2zSortOrder);
-  int getActiveASList(lua_State* vm, const Paginator *p);
+  int getActiveASList(lua_State* vm, const Paginator *p, bool diff = false);
   int getActiveOSList(lua_State* vm, const Paginator *p);
   int getActiveCountriesList(lua_State* vm, const Paginator *p);
   int getActiveVLANList(lua_State* vm,
@@ -696,8 +695,8 @@ class NetworkInterface : public NetworkInterfaceAlertableEntity {
 			   u_int8_t location_filter);
   int getMacsIpAddresses(lua_State *vm, int idx);
   void getFlowsStats(lua_State* vm);
-  void getNetworkStats(lua_State* vm, u_int16_t network_id, AddressTree *allowed_hosts) const;
-  void getNetworksStats(lua_State* vm, AddressTree *allowed_hosts) const;
+  void getNetworkStats(lua_State* vm, u_int16_t network_id, AddressTree *allowed_hosts, bool diff = false) const;
+  void getNetworksStats(lua_State* vm, AddressTree *allowed_hosts, bool diff = false) const;
   int getFlows(lua_State* vm,
 	       u_int32_t *begin_slot,
 	       bool walk_all,
@@ -756,7 +755,7 @@ class NetworkInterface : public NetworkInterfaceAlertableEntity {
   OperatingSystem *getOS(OSType os, bool create_if_not_present, bool is_inline_call);
   Country* getCountry(const char *country_name, bool create_if_not_present, bool is_inline_call);
   virtual Mac*  getMac(u_int8_t _mac[6], bool create_if_not_present, bool is_inline_call);
-  virtual Host* getHost(char *host_ip, VLANid vlan_id, bool is_inline_call);
+  virtual Host* getHost(char *host_ip, VLANid vlan_id, u_int16_t observationPointId, bool is_inline_call);
   bool getHostInfo(lua_State* vm, AddressTree *allowed_hosts, char *host_ip, VLANid vlan_id);
   void findPidFlows(lua_State *vm, u_int32_t pid);
   void findProcNameFlows(lua_State *vm, char *proc_name);
@@ -891,9 +890,9 @@ class NetworkInterface : public NetworkInterfaceAlertableEntity {
   inline void decNumHosts(bool local) { if(local) numLocalHosts--; numHosts--; };
   inline void incNumL2Devices()       { numL2Devices++; }
   inline void decNumL2Devices()       { numL2Devices--; }
-  inline u_int32_t getScalingFactor()       { return(scalingFactor); }
+  inline u_int32_t getScalingFactor()       const { return(scalingFactor); }
   inline void setScalingFactor(u_int32_t f) { scalingFactor = f;     }
-  inline bool isSampledTraffic()            { return((scalingFactor == 1) ? false : true); }
+  virtual bool isSampledTraffic()           const { return((scalingFactor == 1) ? false : true); }
 #ifdef NTOPNG_PRO
   virtual bool getCustomAppDetails(u_int32_t remapped_app_id, u_int32_t *const pen, u_int32_t *const app_field, u_int32_t *const app_id) { return false; };
   virtual void addToNotifiedInformativeCaptivePortal(u_int32_t client_ip) { ; };
@@ -939,7 +938,7 @@ class NetworkInterface : public NetworkInterfaceAlertableEntity {
   inline void decPoolNumL2Devices(u_int16_t id, bool is_inline_call) {
     if (host_pools) host_pools->decNumL2Devices(id, is_inline_call);
   };
-  Host* findHostByIP(AddressTree *allowed_hosts, char *host_ip, VLANid vlan_id);
+  Host* findHostByIP(AddressTree *allowed_hosts, char *host_ip, VLANid vlan_id, u_int16_t observationPointId);
 #ifdef HAVE_NINDEX
   NIndexFlowDB* getNindex();
 #endif
@@ -983,9 +982,10 @@ class NetworkInterface : public NetworkInterfaceAlertableEntity {
   void incNumAlertedFlows(Flow *f, AlertLevel severity);
   void decNumAlertedFlows(Flow *f, AlertLevel severity);
   virtual u_int64_t getNumActiveAlertedFlows()      const;
+  virtual u_int64_t getNumActiveAlertedFlows(AlertLevelGroup alert_level_group) const;
   void incNumAlertsEngaged(AlertEntity alert_entity);
   void decNumAlertsEngaged(AlertEntity alert_entity);
-  inline void incNumDroppedAlerts(u_int32_t num_dropped)  { num_dropped_alerts += num_dropped; }
+  void incNumDroppedAlerts(AlertEntity alert_entity);
   inline void incNumWrittenAlerts()			  { num_written_alerts++; }
   inline void incNumAlertsQueries()			  { num_alerts_queries++; }
   inline u_int64_t getNumWrittenAlerts()		  { return(num_written_alerts); }
@@ -1036,6 +1036,17 @@ class NetworkInterface : public NetworkInterfaceAlertableEntity {
   u_int64_t dequeueHostAlertsFromChecks(u_int budget);
   inline HostChecksExecutor* getHostCheckExecutor() { return(host_checks_executor); }
   HostCheck *getCheck(HostCheckID t);
+
+  void incObservationPointIdFlows(u_int16_t pointId, u_int32_t tot_bytes);
+
+  inline bool hasObservationPointId(u_int16_t pointId) {
+    /* This is work in progress and it needs to be locked when read */
+    return((observationPoints.find(pointId) == observationPoints.end()) ? false : true);
+  }
+  
+  void getObservationPoints(lua_State* vm);
+  inline bool haveObservationPointsDefined()    { return(observationPoints.size() == 0 ? false : true); }
+  inline u_int16_t getFirstObservationPointId() { return(observationPoints.size() == 0 ? 0 : observationPoints.begin()->first); }
 };
 
 #endif /* _NETWORK_INTERFACE_H_ */

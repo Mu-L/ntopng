@@ -297,8 +297,8 @@ function fixTimeRange(chart, params, align_step, actual_step) {
 
   resolution = Math.max(actual_step, resolution);
 
-  if(align) {
-    align = (align_step && (frame != 86400) /* do not align daily traffic to avoid jumping to other RRA */) ? Math.max(align, align_step) : 1;
+    if(align) {
+    align = (align_step && (frame < 86400) /* do not align daily traffic to avoid jumping to other RRA <???> */) ? Math.max(align, align_step) : 1;
     params.epoch_begin -= params.epoch_begin % align;
     params.epoch_end -= params.epoch_end % align;
     diff_epoch = (params.epoch_end - params.epoch_begin);
@@ -317,23 +317,27 @@ function fixTimeRange(chart, params, align_step, actual_step) {
 function findActualStep(raw_step, tstart) {
   if(typeof supported_steps === "object") {
     if(supported_steps[raw_step]) {
-      var retention = supported_steps[raw_step].retention;
+      const retention = supported_steps[raw_step].retention;
 
       if(retention) {
-        var now_ts = Date.now() / 1000;
+        const now_ts = Date.now() / 1000;
         var delta = now_ts - tstart;
+        var partial;
 
         for(var i=0; i<retention.length; i++) {
-          var partial = raw_step * retention[i].aggregation_dp;
           var tframe = partial * retention[i].retention_dp;
+	  partial = raw_step * retention[i].aggregation_dp;
           delta -= tframe;
 
           if(delta <= 0)
-            return partial;
+            break;
         }
+
+	return partial;
       }
     }
   }
+
   return raw_step;
 }
 
@@ -411,7 +415,7 @@ function attachStackedChartCallback(chart, schema_name, chart_id, zoom_reset_id,
   var max_interval = findActualStep(step, params.epoch_begin) * 8;
   var initial_interval = (params.epoch_end - params.epoch_begin);
   var is_max_zoom = (initial_interval <= max_interval);
-  var url = http_prefix + "/lua/rest/v1/get/timeseries/ts.lua";
+  var url = http_prefix + "/lua/rest/v2/get/timeseries/ts.lua";
   var first_load = true;
   var first_time_loaded = true;
   var manual_trigger_extra_series = {}; // keeps track of series manually shown/hidden by the user
@@ -826,6 +830,10 @@ function attachStackedChartCallback(chart, schema_name, chart_id, zoom_reset_id,
       var series = data.series;
       var total_serie;
       var color_i = 0;
+      let time_elapsed = 1;
+
+      if(visualization.time_elapsed)
+        time_elapsed = visualization.time_elapsed;
 
       var chart_colors = (series.length <= chart_colors_min.length) ? chart_colors_min : chart_colors_full;
 
@@ -835,7 +843,7 @@ function attachStackedChartCallback(chart, schema_name, chart_id, zoom_reset_id,
 
         var t = data.start;
         for(var i=0; i<serie_data.length; i++) {
-          values[i] = [t, serie_data[i] ];
+          values[i] = [t, serie_data[i] / time_elapsed ];
           t += data.step;
         }
 
@@ -971,7 +979,7 @@ function attachStackedChartCallback(chart, schema_name, chart_id, zoom_reset_id,
           //trend: [graph_i18n.trend, "#62ADF6", smooth, num_smoothed_points],
           //ema: ["EMA", "#F96BFF", exponentialMovingAverageArray, {periods: num_smoothed_points}],
           //sma: ["SMA", "#A900FF", simpleMovingAverageArray, {periods: num_smoothed_points}],
-          rsi: ["RSI cur vs past", "#00FF5D", relativeStrengthIndexArray, {periods: num_smoothed_points}],
+          //rsi: ["RSI cur vs past", "#00FF5D", relativeStrengthIndexArray, {periods: num_smoothed_points}],
         }
 
         function add_smoothed_serie(fn_to_use) {
@@ -1109,41 +1117,109 @@ function attachStackedChartCallback(chart, schema_name, chart_id, zoom_reset_id,
           });
         }
 
+        /* 
+          Function used to split charts info, otherwise graphs with multiple
+          timeseries are going to have incorrect values
+        */
+        function splitSeriesInfo(stats_name, cell, show_date, formatter, total) {
+          let val = "";
+          let time_elapsed = 1;
+          const val_formatter = (formatter ? formatter : stats_formatter)
+
+          if(visualization.time_elapsed)
+            time_elapsed = visualization.time_elapsed
+          
+          if(visualization.first_timeseries_only) {
+            val = val_formatter(stats.by_serie[0][stats_name] / time_elapsed) + (show_date ? (" (" + (new Date(res[0].values[stats[stats_name + "_idx"]][0] * 1000)).format(datetime_format) + ")") : "");
+          } else if(visualization.split_directions && stats.by_serie && !total) {
+            const values = [];
+
+            /* Format each splitted info */
+            for(var i=0; i<series.length; i++) {
+              if(stats.by_serie[i])
+                values.push(val_formatter(stats.by_serie[i][stats_name] / time_elapsed) +
+                  " [" + series_formatted_labels[i] + "]" +
+                  /* Add the date */
+                  (show_date ? (" (" + (new Date(res[i].values[stats.by_serie[i][stats_name + "_idx"] + 1][0] * 1000)).format(datetime_format) + ")") : ""));
+            }
+
+            /* Join them using a new line */
+            val = values.join("<br />");
+          } else
+            val = val_formatter(stats[stats_name] / time_elapsed) + (show_date ? (" (" + (new Date(res[0].values[stats[stats_name + "_idx"]][0] * 1000)).format(datetime_format) + ")") : "");
+
+          /* Add the string to the span */
+          if(val)
+            cell.show().find("span").html(val);
+
+          return values;
+        }
+
         var total_cell = stats_table.find(".graph-val-total");
         var average_cell = stats_table.find(".graph-val-average");
         var min_cell = stats_table.find(".graph-val-min");
         var max_cell = stats_table.find(".graph-val-max");
         var perc_cell = stats_table.find(".graph-val-95percentile");
+        
+        var total_cell_title = stats_table.find(".graph-val-total-title");
+        var average_cell_title = stats_table.find(".graph-val-average-title");
+        var max_cell_title = stats_table.find(".graph-val-max-title");
+        var min_cell_title = stats_table.find(".graph-val-min-title");
+        var perc_cell_title = stats_table.find(".graph-val-95percentile-title");
+
+
+        // fill the stats
+        if(stats.total || total_cell_title.is(':visible'))
+          splitSeriesInfo("total", total_cell_title, false, tot_formatter, true);
+        if(stats.average || average_cell_title.is(':visible'))
+          splitSeriesInfo("average", average_cell_title, false, stats_formatter);
+        if((stats.max_val || max_cell_title.is(':visible')) && res[0].values[stats.max_val_idx])
+          splitSeriesInfo("max_val", max_cell_title, true, stats_formatter);
+        if((stats.min_val || min_cell_title.is(':visible')) && res[0].values[stats.min_val_idx])
+          splitSeriesInfo("min_val", min_cell_title, true, stats_formatter);
+        if(stats["95th_percentile"] || perc_cell.is(':visible')) {
+          splitSeriesInfo("95th_percentile", perc_cell_title, false, stats_formatter);
+
+
+
+
+
+          if(!visualization.split_directions) {
+            /* When directions are split, hide the total stat */
+            var values = makeFlatLineValues(data.start, data.step, data.count, stats["95th_percentile"]);
+
+            res.push({
+              key: graph_i18n["95_perc"],
+              yAxis: 1,
+              values: values,
+              type: "line",
+              classed: "line-dashed line-animated",
+              color: "#476DFF",
+              legend_key: "95perc",
+              disabled: isLegendDisabled("95perc", true),
+            });
+          }
+        }
+
 
         // fill the stats
         if(stats.total || total_cell.is(':visible'))
-          total_cell.show().find("span").html(tot_formatter(stats.total));
+          splitSeriesInfo("total", total_cell, false, tot_formatter, true);
         if(stats.average || average_cell.is(':visible'))
-          average_cell.show().find("span").html(stats_formatter(stats.average));
+          splitSeriesInfo("average", average_cell, false, stats_formatter);
         if((stats.min_val || min_cell.is(':visible')) && res[0].values[stats.min_val_idx])
-          min_cell.show().find("span").html(stats_formatter(stats.min_val) + " @ " + (new Date(res[0].values[stats.min_val_idx][0] * 1000)).format(datetime_format));
+          splitSeriesInfo("min_val", min_cell, true, stats_formatter);
         if((stats.max_val || max_cell.is(':visible')) && res[0].values[stats.max_val_idx])
-          max_cell.show().find("span").html(stats_formatter(stats.max_val) + " @ " + (new Date(res[0].values[stats.max_val_idx][0] * 1000)).format(datetime_format));
+          splitSeriesInfo("max_val", max_cell, true, stats_formatter);
         if(stats["95th_percentile"] || perc_cell.is(':visible')) {
-          let perc_val = "";
+          splitSeriesInfo("95th_percentile", perc_cell, false, stats_formatter);
 
-          if(visualization.split_directions && stats.by_serie) {
-            const values = [];
 
-            for(var i=0; i<series.length; i++) {
-              if(stats.by_serie[i])
-                values.push(stats_formatter(stats.by_serie[i]["95th_percentile"]) + " [" + series_formatted_labels[i] + "]");
-            }
 
-            perc_val = values.join(", ");
-          } else
-            perc_val = stats_formatter(stats["95th_percentile"]);
 
-          if(perc_val)
-            perc_cell.show().find("span").html(perc_val);
 
           if(!visualization.split_directions) {
-            /* When directions are split, hide the total 95th percentile */
+            /* When directions are split, hide the total stat */
             var values = makeFlatLineValues(data.start, data.step, data.count, stats["95th_percentile"]);
 
             res.push({
@@ -1348,14 +1424,7 @@ function updateGraphsTableView(view, graph_params, has_nindex, nindex_query, per
     nindex_buttons += '<li><a class="dropdown-item" href="#" onclick="return onGraphMenuClick(null, 6)">6</a></li>';
     nindex_buttons += '</span></div>';
   }
-
-  nindex_buttons += '<div class="btn-group pull-right"><button class="btn btn-link dropdown-toggle" data-bs-toggle="dropdown">';
-  nindex_buttons += "Explorer";
-  nindex_buttons += '<span class="caret"></span></button><ul class="dropdown-menu" role="menu">';
-  nindex_buttons += '<li><a class="dropdown-item" href="'+ http_prefix +'/lua/pro/nindex_topk.lua'+ nindex_query +'">Top-K</a></li>';
-  nindex_buttons += '<li><a class="dropdown-item" href="'+ http_prefix +'/lua/pro/nindex.lua'+ nindex_query +'">Flows</a></li>';
-  nindex_buttons += '</span></div>';
-
+  
   if(view.columns) {
     var url = http_prefix + (view.nindex_view ? "/lua/pro/get_nindex_flows.lua" : "/lua/pro/get_ts_table.lua");
 
@@ -1429,7 +1498,10 @@ function updateGraphsTableView(view, graph_params, has_nindex, nindex_query, per
           $("table td:last-child, th:last-child", graph_table).remove();
 
         if(data && data.stats && data.stats.query_duration_msec) {
-           $("#flows-query-time").html(data.stats.query_duration_msec/1000.0);
+           let time_elapsed = data.stats.query_duration_msec/1000.0;
+           if(time_elapsed < 0.1)
+            time_elapsed = "< 0.1"
+           $("#flows-query-time").html(time_elapsed);
            $("#flows-processed-records").html(data.stats.num_records_processed);
            stats_div.show();
         } else

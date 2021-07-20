@@ -26,7 +26,7 @@
 
 /* ***************************************************** */
 
-DangerousHost::DangerousHost() : HostCheck(ntopng_edition_community) {
+DangerousHost::DangerousHost() : HostCheck(ntopng_edition_community, false /* All interfaces */, true /* Exclude for nEdge */, false /* NOT only for nEdge */) {
   score_threshold = (u_int64_t)-1;
 };
 
@@ -43,7 +43,7 @@ void DangerousHost::periodicUpdate(Host *h, HostAlert *engaged_alert) {
   if(h->getConsecutiveHighScore() > NUM_CONSECUTIVE_CHECKS_BEFORE_ALERTING) {
     if (!alert) { /* Alert not already triggered */
       /* Trigger the alert and add the host to the Default nProbe IPS host pool */
-      alert = allocAlert(this, h, SCORE_LEVEL_ERROR, 0, h->getScore(), h->getConsecutiveHighScore());
+      alert = allocAlert(this, h, CLIENT_FULL_RISK_PERCENTAGE, h->getScore(), h->getConsecutiveHighScore());
 
 #ifdef NTOPNG_PRO
       /* Get nProbe IPS host pool ID */

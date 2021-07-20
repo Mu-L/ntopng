@@ -24,7 +24,7 @@
 
 /* ***************************************************** */
 
-ServerContacts::ServerContacts() : HostCheck(ntopng_edition_community) {
+ServerContacts::ServerContacts() : HostCheck(ntopng_edition_community, false /* All interfaces */, false /* Don't exclude for nEdge */, false /* NOT only for nEdge */) {
   contacts_threshold = (u_int64_t)5;
 };
 
@@ -35,7 +35,7 @@ void ServerContacts::periodicUpdate(Host *h, HostAlert *engaged_alert) {
   u_int32_t contacted_servers = 0;
 
   if((contacted_servers = getContactedServers(h)) >= contacts_threshold) {
-    if (!alert) alert = allocAlert(this, h, SCORE_LEVEL_NOTICE, 0, contacted_servers, contacts_threshold);
+    if (!alert) alert = allocAlert(this, h, CLIENT_FULL_RISK_PERCENTAGE, contacted_servers, contacts_threshold);
     if (alert) h->triggerAlert(alert);
   }
 }

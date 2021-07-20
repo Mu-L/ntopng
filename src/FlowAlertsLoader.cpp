@@ -42,6 +42,7 @@ FlowAlertsLoader::FlowAlertsLoader() {
   registerAlert(FlowRiskSSHObsoleteAlert::getClassType(), FlowRiskSSHObsoleteAlert::getDefaultScore());
   registerAlert(FlowRiskSuspiciousDGADomainAlert::getClassType(), FlowRiskSuspiciousDGADomainAlert::getDefaultScore());
   registerAlert(FlowRiskTLSMissingSNIAlert::getClassType(), FlowRiskTLSMissingSNIAlert::getDefaultScore());
+  registerAlert(FlowRiskTLSCertValidityTooLongAlert::getClassType(), FlowRiskTLSCertValidityTooLongAlert::getDefaultScore());
   registerAlert(FlowRiskTLSNotCarryingHTTPSAlert::getClassType(), FlowRiskTLSNotCarryingHTTPSAlert::getDefaultScore());
   registerAlert(FlowRiskTLSSuspiciousESNIUsageAlert::getClassType(), FlowRiskTLSSuspiciousESNIUsageAlert::getDefaultScore());
   registerAlert(FlowRiskURLPossibleRCEInjectionAlert::getClassType(), FlowRiskURLPossibleRCEInjectionAlert::getDefaultScore());
@@ -68,6 +69,7 @@ FlowAlertsLoader::FlowAlertsLoader() {
   registerAlert(IECUnexpectedTypeIdAlert::getClassType(),        IECUnexpectedTypeIdAlert::getDefaultScore());
   registerAlert(InvalidDNSQueryAlert::getClassType(),            InvalidDNSQueryAlert::getDefaultScore());
   registerAlert(LateralMovementAlert::getClassType(),            LateralMovementAlert::getDefaultScore());
+  registerAlert(PeriodicityChangedAlert::getClassType(),         PeriodicityChangedAlert::getDefaultScore());
   registerAlert(LongLivedFlowAlert::getClassType(),              LongLivedFlowAlert::getDefaultScore());
   registerAlert(LowGoodputFlowAlert::getClassType(),             LowGoodputFlowAlert::getDefaultScore());
   registerAlert(NedgeBlockedFlowAlert::getClassType(),           NedgeBlockedFlowAlert::getDefaultScore());

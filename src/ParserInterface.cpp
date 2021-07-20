@@ -42,7 +42,6 @@ ParserInterface::~ParserInterface() {
 bool ParserInterface::processFlow(ParsedFlow *zflow) {
   bool src2dst_direction, new_flow;
   Flow *flow;
-  ndpi_protocol p = Flow::ndpiUnknownProtocol;
   time_t now;
   bpf_timeval now_tv = { 0 };
   Mac *srcMac = NULL, *dstMac = NULL;
@@ -154,7 +153,7 @@ bool ParserInterface::processFlow(ParsedFlow *zflow) {
 
   /* Updating Flow */
   flow = getFlow(srcMac, dstMac,
-		 zflow->vlan_id,
+		 zflow->vlan_id, zflow->observationPointId,
 		 zflow->device_ip,
 		 zflow->inIndex, zflow->outIndex,
 		 NULL /* ICMPinfo */,
@@ -167,9 +166,8 @@ bool ParserInterface::processFlow(ParsedFlow *zflow) {
 
   PROFILING_SECTION_EXIT(0);
 
-  if(flow == NULL) {
-    return false;
-  }
+  if(flow == NULL)
+    return false;  
 
   if(zflow->absolute_packet_octet_counters) {
     /* Ajdust bytes and packets counters if the zflow update contains absolute values.
@@ -284,6 +282,10 @@ bool ParserInterface::processFlow(ParsedFlow *zflow) {
 			 zflow->pkt_sampling_rate * zflow->in_bytes);
   }
 
+  if(zflow->observationPointId != 0) 
+    incObservationPointIdFlows(zflow->observationPointId,
+			       zflow->pkt_sampling_rate * (zflow->in_bytes + zflow->out_bytes));      
+
   if(zflow->l4_proto == IPPROTO_TCP) {
     if(zflow->tcp.client_tcp_flags || zflow->tcp.server_tcp_flags) {
       /* There's a breadown between client and server TCP flags */
@@ -326,12 +328,13 @@ bool ParserInterface::processFlow(ParsedFlow *zflow) {
 		     zflow->first_switched,
 		     zflow->last_switched);
 
-  p.app_protocol = zflow->l7_proto.app_protocol;
-  p.master_protocol = zflow->l7_proto.master_protocol;
-  p.category = NDPI_PROTOCOL_CATEGORY_UNSPECIFIED;
-
   if(!flow->isDetectionCompleted()) {
+    ndpi_protocol p = Flow::ndpiUnknownProtocol;
     ndpi_protocol guessed_protocol = Flow::ndpiUnknownProtocol;
+
+    p.app_protocol = zflow->l7_proto.app_protocol;
+    p.master_protocol = zflow->l7_proto.master_protocol;
+    p.category = NDPI_PROTOCOL_CATEGORY_UNSPECIFIED;
 
     /* First, there's an attempt to guess the protocol so that custom protocols
        defined in ntopng will still be applied to the protocols detected by nprobe. */
@@ -447,14 +450,52 @@ bool ParserInterface::processFlow(ParsedFlow *zflow) {
     if(o) flow->setExternalAlert(o);
   }
 
+  flow->updateSuspiciousDGADomain();
+
   /* Do not put incStats before guessing the flow protocol */
-  incStats(true /* ingressPacket */,
-	   now, srcIP.isIPv4() ? ETHERTYPE_IP : ETHERTYPE_IPV6,
-	   flow->getStatsProtocol(),
-	   flow->get_protocol_category(),
-	   zflow->l4_proto,
-	   zflow->pkt_sampling_rate*(zflow->in_bytes + zflow->out_bytes),
-	   zflow->pkt_sampling_rate*(zflow->in_pkts + zflow->out_pkts));
+  u_int16_t eth_type = srcIP.isIPv4() ? ETHERTYPE_IP : ETHERTYPE_IPV6;
+
+#if 0
+    ntop->getTrace()->traceEvent(TRACE_WARNING, "%s(%d) [in: %u][out: %u]",
+				 (zflow->direction == 0 /* RX */) ? "RX" : "TX",
+				 zflow->direction,
+				 zflow->in_bytes, zflow->out_bytes);
+#endif
+
+  if(zflow->direction == UNKNOWN_FLOW_DIRECTION)
+    incStats(true /* ingressPacket */,
+	     now, eth_type,
+	     flow->getStatsProtocol(),
+	     flow->get_protocol_category(),
+	     zflow->l4_proto,
+	     zflow->pkt_sampling_rate*(zflow->in_bytes + zflow->out_bytes),
+	     zflow->pkt_sampling_rate*(zflow->in_pkts + zflow->out_pkts));
+  else {
+    
+    if(zflow->direction == 0 /* RX */) {
+      if(zflow->in_pkts)
+	incStats(true /* Ingress */, now, eth_type,
+		 flow->getStatsProtocol(), flow->get_protocol_category(), zflow->l4_proto,
+		 zflow->pkt_sampling_rate * zflow->in_bytes,
+		 zflow->pkt_sampling_rate * zflow->in_pkts);
+      if(zflow->out_pkts)
+	incStats(false /* Egress */, now, eth_type,
+		 flow->getStatsProtocol(), flow->get_protocol_category(), zflow->l4_proto,
+		 zflow->pkt_sampling_rate * zflow->out_bytes,
+		 zflow->pkt_sampling_rate * zflow->out_pkts);
+    } else { /* TX */
+      if(zflow->out_bytes)
+	incStats(true /* Ingress */, now, eth_type,
+		 flow->getStatsProtocol(), flow->get_protocol_category(), zflow->l4_proto,
+		 zflow->pkt_sampling_rate * zflow->out_bytes,
+		 zflow->pkt_sampling_rate * zflow->out_pkts);
+      if(zflow->in_pkts)
+	incStats(false /* Egress */, now, eth_type,
+		 flow->getStatsProtocol(), flow->get_protocol_category(), zflow->l4_proto,
+		 zflow->pkt_sampling_rate * zflow->in_bytes,
+		 zflow->pkt_sampling_rate * zflow->in_pkts);
+    }
+  }  
 
 #ifdef NTOPNG_PRO
   /* Check if direct flow dump is enabled */

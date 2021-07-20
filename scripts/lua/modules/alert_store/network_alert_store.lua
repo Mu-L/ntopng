@@ -14,6 +14,7 @@ local format_utils = require "format_utils"
 local alert_consts = require "alert_consts"
 local alert_utils = require "alert_utils"
 local alert_entities = require "alert_entities"
+local tag_utils = require "tag_utils"
 local json = require "dkjson"
 
 -- ##############################################
@@ -60,14 +61,35 @@ end
 --@brief Add filters according to what is specified inside the REST API
 function network_alert_store:_add_additional_request_filters()
    -- Add filters specific to the system family
+   local network_name = _GET["network_name"]
+
+   if network_name then
+      network_name = self:_escape(network_name)
+   end
+
+   self:add_filter_condition_list('name', network_name)
 end
+
+-- ##############################################
+
+--@brief Get info about additional available filters
+function network_alert_store:_get_additional_available_filters()
+   local filters = {
+      network_name = {
+         value_type = 'text',
+        i18n_label = i18n('tags.network_name'),
+      },
+   }
+
+   return filters
+end 
 
 -- ##############################################
 
 --@brief Performs a query for the top networks by alert count
 function network_alert_store:top_local_network_id_historical()
    -- Preserve all the filters currently set
-   local where_clause = table.concat(self._where, " AND ")
+   local where_clause = self:build_where_clause()
 
    local q = string.format("SELECT local_network_id, count(*) count, name FROM %s WHERE %s GROUP BY local_network_id ORDER BY count DESC LIMIT %u",
 			   self._table_name, where_clause, self._top_limit)
@@ -105,8 +127,8 @@ end
 function network_alert_store:format_record(value, no_html)
    local record = self:format_json_record_common(value, alert_entities.network.entity_id, no_html)
 
-   local alert_id_label = alert_consts.alertTypeLabel(tonumber(value["alert_id"]), no_html)
    local alert_name = alert_consts.alertTypeLabel(tonumber(value["alert_id"]), no_html, alert_entities.network.entity_id)
+   local alert_fullname = alert_consts.alertTypeLabel(tonumber(value["alert_id"]), true, alert_entities.network.entity_id)
    local alert_info = alert_utils.getAlertInfo(value)
    local msg = alert_utils.formatAlertMessage(ifid, value, alert_info)
 
@@ -126,6 +148,7 @@ function network_alert_store:format_record(value, no_html)
 
    record[RNAME.MSG.name] = {
      name = noHtml(alert_name),
+     fullname = alert_fullname,
      value = tonumber(value["alert_id"]),
      description = msg,
      configset_ref = alert_utils.getConfigsetAlertLink(alert_info)

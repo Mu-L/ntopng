@@ -3,10 +3,13 @@
 --
 
 local dirs = ntop.getDirs()
+package.path = dirs.installdir .. "/pro/scripts/lua/enterprise/modules/?.lua;" .. package.path
 package.path = dirs.installdir .. "/scripts/lua/modules/?.lua;" .. package.path
 package.path = dirs.installdir .. "/scripts/lua/modules/toasts/?.lua;" .. package.path
+
 if((dirs.scriptdir ~= nil) and (dirs.scriptdir ~= "")) then package.path = dirs.scriptdir .. "/lua/modules/?.lua;" .. package.path end
 require "lua_utils"
+
 local alerts_api = require("alerts_api")
 local recording_utils = require "recording_utils"
 local telemetry_utils = require "telemetry_utils"
@@ -25,12 +28,14 @@ local is_appliance = ntop.isAppliance()
 local is_admin = isAdministrator()
 local is_windows = ntop.isWindows()
 local info = ntop.getInfo()
-local updates_supported = (is_admin and ntop.isPackage() and not ntop.isWindows())
+local updates_supported = (not ntop.isOffline() and is_admin and ntop.isPackage() and not ntop.isWindows())
 local has_local_auth = (ntop.getPref("ntopng.prefs.local.auth_enabled") ~= '0')
-
 local is_system_interface = page_utils.is_system_view()
+local behavior_utils = require("behavior_utils")
 
 blog_utils.fetchLatestPosts()
+
+observationPointId = ntop.getUserObservationPointId()
 
 print([[
    <div class='wrapper'>
@@ -64,7 +69,7 @@ print[[
       "others": "]] print(i18n("others")) print[[",
       "warning": "]] print(i18n("warning")) print[[",
       "search": "]] print(i18n("search")) print[[",
-      
+
       "and_x_more": "]] print(i18n("and_x_more", { num = '$num'})) print[[",
       "invalid_input": "]] print(i18n("validation.invalid_input")) print[[",
       "missing_field": "]] print(i18n("validation.missing_field")) print[[",
@@ -80,7 +85,7 @@ print[[
    const http_prefix = "]] print(ntop.getHttpPrefix()) print[[";
 
    window.unchangable_pool_names = [
-      'Jailed hosts pool'
+      'Jailed Hosts'
    ]
 
 
@@ -114,6 +119,7 @@ interface.select(ifname)
 local ifs = interface.getStats()
 local is_pcap_dump = interface.isPcapDumpInterface()
 local is_packet_interface = interface.isPacketInterface()
+local is_viewed = ifs.isViewed
 ifId = ifs.id
 
 -- NOTE: see sidebar.js for the client logic
@@ -228,28 +234,15 @@ else
    -- ##############################################
 
    local service_map_available = false
-   if(ntop.isEnterpriseL() and (ntop.getPref("ntopng.prefs.is_behaviour_analysis_enabled") == "1")) then
-      local service_map = interface.serviceMap()
+   local periodicity_map_available = false
 
-      if service_map and (table.len(service_map) > 0) then
-         service_map_available = true
-      end
-   end
+   service_map_available, periodicity_map_available = behavior_utils.mapsAvailable()
 
-   local periodic_info_available = false
-   if(ntop.isEnterpriseL() and (ntop.getPref("ntopng.prefs.is_behaviour_analysis_enabled") == "1")) then
-      local periodicity_map = interface.periodicityMap()
-
-      if periodicity_map and (table.len(periodicity_map) > 0) then
-         periodic_info_available = true
-      end
-   end
-   
    -- Hosts
    page_utils.add_menubar_section(
       {
 	 section = page_utils.menu_sections.hosts,
-	 hidden = ifs.isViewed or is_system_interface,
+	 hidden = is_system_interface or is_viewed,
 	 entries = {
 	    {
 	       entry = page_utils.menu_entries.hosts,
@@ -314,11 +307,11 @@ else
    )
 
   -- ##############################################
-   
+
   -- Maps
    page_utils.add_menubar_section({
       section = page_utils.menu_sections.maps,
-      hidden = is_system_interface,
+      hidden = is_system_interface or is_viewed,
       entries = {
          {
             entry = page_utils.menu_entries.service_map,
@@ -327,7 +320,7 @@ else
           },
           {
             entry = page_utils.menu_entries.periodicity_map,
-            hidden = not periodic_info_available,
+            hidden = not periodicity_map_available,
             url = '/lua/pro/enterprise/periodicity_map.lua',
           },
           {
@@ -344,26 +337,31 @@ else
 
    -- ##############################################
 
-   -- Exporters
+   -- Probes
    page_utils.add_menubar_section(
       {
-	 section = page_utils.menu_sections.exporters,
+	 section = page_utils.menu_sections.collection,
 	 hidden = ((ifs.type ~= "zmq" and ifs.type ~= "custom") or not ntop.isEnterpriseM()) or is_system_interface,
 	 entries = {
 	    {
-	       entry = page_utils.menu_entries.event_exporters,
+	       entry = page_utils.menu_entries.event_probes,
 	       hidden = not ifs.has_seen_ebpf_events,
 	       url = '/lua/pro/enterprise/event_exporters.lua',
 	    },
 	    {
-	       entry = page_utils.menu_entries.sflow_exporters,
+	       entry = page_utils.menu_entries.sflow_probes,
 	       hidden = table.len(interface.getSFlowDevices() or {}) == 0,
 	       url = '/lua/pro/enterprise/sflowdevices_stats.lua',
 	    },
 	    {
-	       entry = page_utils.menu_entries.flow_exporters,
+	       entry = page_utils.menu_entries.probes,
 	       url = '/lua/pro/enterprise/flowdevices_stats.lua',
 	    },
+       {
+          entry = page_utils.menu_entries.observation_points,
+          hidden = table.len(interface.getObservationPoints() or {}) == 0,
+          url = '/lua/pro/enterprise/observation_points.lua',
+       },
 	 },
       }
    )
@@ -608,8 +606,8 @@ page_utils.add_menubar_section(
 	 {
 	    entry = page_utils.menu_entries.alert_exclusions,
 	    section = page_utils.menu_sections.checks,
-	    hidden = not is_admin or not auth.has_capability(auth.capabilities.checks),
-	    url = '/lua/admin/edit_alert_exclusions.lua?subdir=host',
+	    hidden = not is_admin or not auth.has_capability(auth.capabilities.checks) or not ntop.isEnterpriseM(),
+	    url = '/lua/pro/admin/edit_alert_exclusions.lua?subdir=host',
 	 },
 	 {
 	    entry = page_utils.menu_entries.divider,
@@ -681,7 +679,7 @@ if not info.oem and auth.has_capability(auth.capabilities.developer) then
 	       entry = page_utils.menu_entries.api,
 	       url = 'https://www.ntop.org/guides/ntopng/api/',
 	    },
-	   
+
 	 },
       }
    )
@@ -756,6 +754,10 @@ print[[
 
   const updates_csrf = ']] print(ntop.getRandomCSRFValue()) print[[';
 
+  /* Updates status */
+  var updatesStatus = '';
+  var updatesLastCheck = 0;
+
   /* Install latest update */
   var installUpdate = function() {
     if (confirm(']] print(i18n("updates.install_confirm"))
@@ -772,8 +774,10 @@ print[[
         },
         success: function(rsp) {
           $('#updates-info-li').html(']] print(i18n("updates.installing")) print[[')
+          $('#updates-info-li').attr('title', '');
           $('#updates-install-li').hide();
           $('#admin-badge').hide();
+	  updatesStatus = 'installing';
         }
       });
     }
@@ -790,20 +794,37 @@ print[[
       },
       success: function(rsp) {
         $('#updates-info-li').html(']] print(i18n("updates.checking")) print[[');
+        $('#updates-info-li').attr('title', '');
         $('#updates-install-li').hide();
         $('#admin-badge').hide();
+	updatesStatus = 'checking';
       }
     });
   }
 
   /* Update the menu with the current updates status */
   var updatesRefresh = function() {
+    const now = Date.now()/1000;
+
+    if (updatesStatus == 'installing' || updatesStatus == 'checking') {
+        /* Go ahead (frequent update) */
+    } else if (updatesStatus == 'update-avail' || updatesStatus == 'upgrade-failure') {
+        return; /* no need to check again */
+    } else { /* updatesStatus == 'not-avail' || updatesStatus == 'update-failure' || updatesStatus == <other errors> || updatesStatus == '' */
+        const check_time_sec = 300;
+        if (now < updatesLastCheck + check_time_sec) return; /* check with low freq */
+    }
+
+    updatesLastCheck = now; 
+
     $.ajax({
       type: 'GET',
         url: ']] print (ntop.getHttpPrefix()) print [[/lua/check_update.lua',
         data: {},
         success: function(rsp) {
           if(rsp && rsp.status) {
+
+	    updatesStatus = rsp.status;
 
             if (rsp.status == 'installing') {
               $('#updates-info-li').html(']] print(i18n("updates.installing")) print[[')
@@ -889,6 +910,7 @@ local pcapdump = {}
 local ifnames = {}
 local iftype = {}
 local ifHdescr = {}
+local observationPoints = {}
 local ifCustom = {}
 local dynamic = {}
 local action_urls = {}
@@ -921,7 +943,7 @@ for v,k in pairs(iface_names) do
       local snmp_name, snmp_if_name
 
       if cached_device then
-	 -- See if there is a name for this exporter in SNMP
+	 -- See if there is a name for this probe in SNMP
 	 if cached_device.system and cached_device.system.name then
 	    snmp_name = cached_device.system.name
 
@@ -967,13 +989,37 @@ for v,k in pairs(iface_names) do
 
 --   tprint({k, dynamic[k], _ifstats.dynamic_interface_probe_ip, _ifstats.dynamic_interface_inifidx})
 
-   ifHdescr[_ifstats.id] = descr
+    ifHdescr[_ifstats.id] = descr
+
+    if(ifs.id == _ifstats.id) then
+      observationPoints = interface.getObservationPoints()
+   end
+end
+
+if((observationPoints == nil) or (table.len(observationPoints) == 0)) then
+  -- read the validated observation point
+  observationPoints = nil
+  observationPointId = nil
 end
 
 interface.select(ifs.id.."")
 
+local infrastructures = {}
+
+if ntop.isEnterpriseM() then
+   local infrastructure_utils = require("infrastructure_utils")
+   if ntop.isPro() then
+      for _, v in pairs(infrastructure_utils.get_all_instances()) do
+         infrastructures[v.alias] = v.url
+      end
+   end
+end
+
+
+
 local context = {
    ifnames = ifnames,
+   infrastructures = infrastructures, 
    views = views,
    dynamic = dynamic,
    recording = recording,
@@ -984,6 +1030,9 @@ local context = {
    ifCustom = ifCustom,
    action_urls = action_urls,
    is_system_interface = is_system_interface,
+   currentIfaceId = ifs.id,
+   observationPoints = observationPoints,
+   observationPointId = observationPointId
 }
 
 print(template_utils.gen("pages/components/ifaces-dropdown.template", context))
@@ -1115,7 +1164,7 @@ else
       print([[<i class='fas fa-user'></i> ]].. session_user ..[[]])
       print([[</li>]])
    end
-   
+
 end
 
 -- Render nendge services
@@ -1146,18 +1195,24 @@ print([[
 end
 
 -- Rende Toggle Dark theme menu button
-if is_admin then
+
+local theme_selector = ntop.getPref("ntopng.user." .. session_user .. ".theme")
+local theme_selected = i18n("toggle_dark_theme")
+
+if(theme_selector == 'dark') then
+   theme_selected = i18n("toggle_white_theme")
+end
+
 print([[
    <li class='dropdown-divider'></li>
    <li>
-      <a class='dropdown-item toggle-dark-theme' href='#'><i class="fas fa-adjust"></i> ]].. i18n("toggle_dark_theme") ..[[</a>
+      <a class='dropdown-item toggle-dark-theme' href='#'><i class="fas fa-adjust"></i> ]].. theme_selected ..[[</a>
    </li>
 ]])
-end
 
 -- Logout
 
-if(_SESSION["user"] ~= nil and (not is_no_login_user)) then
+if(not is_no_login_user) then
    print[[
 
  <li class='dropdown-divider'></li>
@@ -1202,14 +1257,8 @@ print('</div>')
 print('<div id="major-release-alert" class="alert alert-info" style="display:none" role="alert"><i class="fas fa-cloud-download-alt" id="alerts-menu-triangle"></i> <span id="ntopng_update_available"></span>')
 print('</div>')
 
--- Hidden by default, will be shown by the footer if necessary
-print('<div id="move-rrd-to-influxdb" class="alert alert-warning alert-dismissable" style="display:none" role="alert"><i class="fas fa-exclamation-triangle fa-lg" id="alerts-menu-triangle"></i> ')
-print(i18n("alert_messages.influxdb_migration_msg", {url="https://www.ntop.org/ntopng/ntopng-and-time-series-from-rrd-to-influxdb-new-charts-with-time-shift/"}))
-print[[<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>]]
-print('</div>')
-
 if(_SESSION["INVALID_CSRF"]) then
-  print('<div id="move-rrd-to-influxdb" class="alert alert-warning alert-dismissable" role="alert"><i class="fas fa-exclamation-triangle fa-lg" id="alerts-menu-triangle"></i> ')
+  print('<div class="alert alert-warning alert-dismissable" role="alert"><i class="fas fa-exclamation-triangle fa-lg" id="alerts-menu-triangle"></i> ')
   print(i18n("expired_csrf"))
   print[[<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>]]
   print('</div>')

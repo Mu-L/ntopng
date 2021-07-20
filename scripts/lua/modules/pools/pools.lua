@@ -22,7 +22,7 @@ local pools = {}
 -- A default pool id value associated to any member without pools
 pools.DEFAULT_POOL_ID = 0           -- Keep in sync with ntop_defines.h NO_HOST_POOL_ID
 pools.DEFAULT_POOL_NAME = "Default" -- Keep in sync with ntop_defines.h DEFAULT_POOL_NAME
-pools.DROP_HOST_POOL_NAME = "Jailed hosts pool"
+pools.DROP_HOST_POOL_NAME = "Jailed Hosts"
 
 if ntop.isnEdge() then
     -- Compatibility with nEdge pools
@@ -538,6 +538,13 @@ end
 
 -- ##############################################
 
+-- @brief returns the maximum number of pools that can be created
+function pools:get_max_num_pools()
+   return 128
+end
+
+-- ##############################################
+
 -- Currently Implemented only into the Host Pools, used to get the host policy
 function pools:get_pool_policy(pool_id)
 end
@@ -927,7 +934,7 @@ function pools:_bind_recipient(recipient_id, pool_id)
 
       -- Persist the pool with the new `recipient`
          self:_persist(bind_pool["pool_id"], bind_pool["name"],
-                       bind_pool_members, bind_pool_recipients, pool["policy"])
+                       bind_pool_members, bind_pool_recipients, bind_pool["policy"])
       end
 
       -- Bind has executed successfully

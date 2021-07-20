@@ -24,9 +24,18 @@
 
 /* *************************************** */
 
-nDPIStats::nDPIStats(bool enable_throughput_stats) {
+nDPIStats::nDPIStats(bool enable_throughput_stats, bool enable_behavior_stats) {
   memset(counters, 0, sizeof(counters));
   memset(cat_counters, 0, sizeof(cat_counters));
+
+#ifdef NTOPNG_PRO
+  nextMinPeriodicUpdate = 0;
+
+  behavior_bytes_traffic = NULL;
+
+  if(enable_behavior_stats)
+    behavior_bytes_traffic = new (std::nothrow)AnalysisBehavior*[MAX_NDPI_PROTOS]();
+#endif
 
   if(enable_throughput_stats)
     bytes_thpt = new (std::nothrow)ThroughputStats*[MAX_NDPI_PROTOS]();
@@ -40,12 +49,22 @@ nDPIStats::nDPIStats(const nDPIStats &stats) {
   memset(counters, 0, sizeof(counters));
   memset(cat_counters, 0, sizeof(cat_counters));
 
+#ifdef NTOPNG_PRO
+  nextMinPeriodicUpdate = 0;
+  
+  behavior_bytes_traffic = NULL;
+
+  if(stats.behavior_bytes_traffic) {
+    behavior_bytes_traffic = new (std::nothrow)AnalysisBehavior*[MAX_NDPI_PROTOS]();
+  }
+#endif
+
   if(stats.bytes_thpt)
     bytes_thpt = new (std::nothrow)ThroughputStats*[MAX_NDPI_PROTOS]();
   else
     bytes_thpt = NULL;
 
-  for(int i = 0; i < MAX_NDPI_PROTOS; i++) {
+  for(int i = 0; i < MAX_NDPI_PROTOS; i++) {      
     if(bytes_thpt && stats.bytes_thpt && stats.bytes_thpt[i])
       bytes_thpt[i] = new (std::nothrow)ThroughputStats(*stats.bytes_thpt[i]);
 
@@ -61,6 +80,11 @@ nDPIStats::nDPIStats(const nDPIStats &stats) {
 
 nDPIStats::~nDPIStats() {
   for(int i=0; i<MAX_NDPI_PROTOS; i++) {
+#ifdef NTOPNG_PRO
+    if(behavior_bytes_traffic && behavior_bytes_traffic[i])
+      delete behavior_bytes_traffic[i];
+#endif
+
     if(counters[i] != NULL)
       free(counters[i]);
 
@@ -70,6 +94,10 @@ nDPIStats::~nDPIStats() {
 
   if(bytes_thpt)
     delete []bytes_thpt;
+#ifdef NTOPNG_PRO
+  if(behavior_bytes_traffic)
+    delete []behavior_bytes_traffic;
+#endif
 }
 
 /* *************************************** */
@@ -137,7 +165,7 @@ void nDPIStats::print(NetworkInterface *iface) {
 
 /* *************************************** */
 
-void nDPIStats::lua(NetworkInterface *iface, lua_State* vm, bool with_categories, bool tsLua) {
+void nDPIStats::lua(NetworkInterface *iface, lua_State* vm, bool with_categories, bool tsLua, bool diff) {
   lua_newtable(vm);
 
   for(int i = 0; i < MAX_NDPI_PROTOS; i++)
@@ -157,6 +185,11 @@ void nDPIStats::lua(NetworkInterface *iface, lua_State* vm, bool with_categories
 	    lua_push_uint64_table_entry(vm, "bytes.rcvd", counters[i]->bytes.rcvd);
 	    lua_push_uint64_table_entry(vm, "duration", counters[i]->duration);
 	    lua_push_uint64_table_entry(vm, "num_flows", counters[i]->total_flows);
+
+    #ifdef NTOPNG_PRO
+      if(behavior_bytes_traffic && behavior_bytes_traffic[i])
+        behavior_bytes_traffic[i]->luaBehavior(vm, "l7_traffic_behavior", (diff ? NDPI_TRAFFIC_BEHAVIOR_REFRESH : 0 ));
+    #endif
 
 	    if(bytes_thpt && bytes_thpt[i]) {
 	      lua_newtable(vm);
@@ -242,6 +275,21 @@ void nDPIStats::updateStats(const struct timeval *tv) {
 
     if(bytes_thpt[i])
       bytes_thpt[i]->updateStats(tv, counters[i]->bytes.sent + counters[i]->bytes.rcvd);
+
+#ifdef NTOPNG_PRO
+    if(tv->tv_sec >= nextMinPeriodicUpdate) {
+      if(!behavior_bytes_traffic)
+        continue;
+
+      if(!behavior_bytes_traffic[i])
+        behavior_bytes_traffic[i] = new (std::nothrow)AnalysisBehavior(0.5 /* Alpha parameter */, 0.1 /* Beta parameter */, 0.05 /* Significance */, true /* Counter */);
+
+      if(behavior_bytes_traffic[i])
+        behavior_bytes_traffic[i]->updateBehavior(NULL, counters[i]->bytes.sent + counters[i]->bytes.rcvd, NULL, false);
+
+      nextMinPeriodicUpdate = tv->tv_sec + NDPI_TRAFFIC_BEHAVIOR_REFRESH;
+    }
+#endif
   }
 }
 

@@ -32,7 +32,7 @@ local ipversion = _GET["version"]
 local vlan = _GET["vlan"]
 local l4proto = _GET["l4proto"]
 
--- remote exporters address and interfaces
+-- remote probes address and interfaces
 local deviceIP = _GET["deviceIP"]
 local inIfIdx  = _GET["inIfIdx"]
 local outIfIdx = _GET["outIfIdx"]
@@ -55,7 +55,7 @@ local ifstats = interface.getStats()
 local ndpistats = interface.getActiveFlowsStats()
 
 local base_url = ntop.getHttpPrefix() .. "/lua/flows_stats.lua"
-local page_params = {}
+local page_params = { ifid = interface.getId() }
 
 if (page == "flows" or page == nil) then
 

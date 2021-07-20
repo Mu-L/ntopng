@@ -26,6 +26,7 @@ locales_utils = require "locales_utils"
 local os_utils = require "os_utils"
 local format_utils = require "format_utils"
 local dscp_consts = require "dscp_consts"
+local tag_utils = require "tag_utils"
 
 -- TODO: replace those globals with locals everywhere
 
@@ -56,6 +57,7 @@ end
 -- ##############################################
 
 function shortenString(name, max_len)
+   local ellipsis = "\u{2026}" -- The unicode ellipsis (takes less space than three separate dots)
    if(name == nil) then return("") end
 
    if max_len == nil then
@@ -64,10 +66,10 @@ function shortenString(name, max_len)
       if(max_len == nil) then max_len = 24 end
    end
 
-   if(string.len(name) < max_len) then
+   if(string.len(name) < max_len + 1 --[[ The space taken by the ellipsis --]]) then
       return(name)
    else
-      return(string.sub(name, 1, max_len).."...")
+      return(string.sub(name, 1, max_len)..ellipsis)
    end
 end
 
@@ -190,27 +192,32 @@ end
 
 -- See Utils::l4proto2name()
 l4_keys = {
-   { "IP",       "ip",          0 },
-   { "ICMP",     "icmp",        1 },
-   { "IGMP",     "igmp",        2 },
-   { "TCP",      "tcp",         6 },
-   { "UDP",      "udp",        17 },
+   { "IP",        "ip",          0 },
+   { "ICMP",      "icmp",        1 },
+   { "IGMP",      "igmp",        2 },
+   { "TCP",       "tcp",         6 },
+   { "UDP",       "udp",        17 },
 
-   { "IPv6",     "ipv6",       41 },
-   { "RSVP",     "rsvp",       46 },
-   { "GRE",      "gre",        47 },
-   { "ESP",      "esp",        50 },
-   { "IPv6-ICMP", "ipv6icmp",  58 },
-   { "OSPF",      "ospf",      89 },
-   { "PIM",      "pim",       103 },
-   { "VRRP",     "vrrp",      112 },
-   { "HIP",      "hip",       139 },
-   { "ICMPv6",   "icmpv6",     58 },
-   { "IGMP",     "igmp",        2 },
-   { "Other IP", "other_ip",   -1 }
+   { "IPv6",      "ipv6",       41 },
+   { "RSVP",      "rsvp",       46 },
+   { "GRE",       "gre",        47 },
+   { "ESP",       "esp",        50 },
+   { "IPv6-ICMP", "ipv6icmp",   58 },
+   { "OSPF",      "ospf",       89 },
+   { "PIM",       "pim",       103 },
+   { "VRRP",      "vrrp",      112 },
+   { "HIP",       "hip",       139 },
+   { "ICMPv6",    "icmpv6",     58 },
+   { "IGMP",      "igmp",        2 },
+   { "Other IP",  "other_ip",   -1 }
 }
 
-L4_PROTO_KEYS = {tcp=6, udp=17, icmp=1, other_ip=-1}
+L4_PROTO_KEYS = {
+   tcp=6,
+   udp=17,
+   icmp=1,
+   other_ip=-1
+}
 
 function __FILE__() return debug.getinfo(2,'S').source end
 function __LINE__() return debug.getinfo(2, 'l').currentline end
@@ -353,7 +360,7 @@ end
 function printASN(asn, asname)
   asname = asname:gsub('"','')
   if(asn > 0) then
-    return("<A HREF='http://as.robtex.com/as"..asn..".html' title='"..asname.."'>"..asname.."</A> <i class='fas fa-external-link-alt fa-lg'></i>")
+   return("<A HREF='http://as.robtex.com/as"..asn..".html' title='"..asname.."'>"..asname.."</A> <i class='fas fa-external-link-alt fa-lg'></i>")
   else
     return(asname)
   end
@@ -706,7 +713,9 @@ function l4_proto_list()
    local list = {}
 
    for _, proto in pairs(l4_keys) do
-      if L4_PROTO_KEYS[proto[2]] then -- add L4 proto only
+      -- add L4 proto only
+      if proto[2] ~= 'ip' and
+         proto[2] ~= 'ipv6' then
          list[proto[1]] =  proto[3]
       end
    end
@@ -1311,22 +1320,6 @@ end
 
 -- #################################
 
-function hostVisualization(ip, name, vlan)
-   if (ip ~= name) then
-      if isIPv6(ip) then
-        name = name.." [IPv6]"
-      end
-   else
-      if vlan ~= nil and tonumber(vlan) > 0 then
-        name = name.."@"..getFullVlanName(vlan)
-      end
-   end
-
-   return name
-end
-
--- #################################
-
 -- This function actively resolves an host if there is not information about it.
 -- NOTE: prefer the host2name on this function
 function resolveAddress(hostinfo, allow_empty)
@@ -1347,7 +1340,7 @@ function resolveAddress(hostinfo, allow_empty)
          return hostinfo2label(hostinfo)
       end
    end
-   return hostVisualization(hostinfo["host"], hostname, hostinfo["vlan"])
+   return hostinfo2label(hostinfo)
 end
 
 -- #################################
@@ -1564,7 +1557,7 @@ function getHostAltName(host_info)
       alt_name = ntop.getCache(getHostAltNamesKey(host_key))
    end
 
-   return alt_name
+   return string.lower(alt_name)
 end
 
 function setHostAltName(host_info, alt_name)
@@ -1590,15 +1583,64 @@ end
 
 -- ##############################################
 
-local function  add_vlan_to_alt_name(alt_name, host_info, show_vlan)
-   -- Adding the vlan if requested
-   if show_vlan then
-      if host_info["vlan"] ~= 0 then
-	 alt_name = alt_name .. "@".. host_info["vlan"]
+local function label2formattedlabel(alt_name, host_info, show_vlan, shorten_len)
+   if not isEmptyString(alt_name) then
+      local ip = host_info["ip"] or host_info["host"]
+      -- Make it shorter
+      local res = alt_name
+
+      -- Special shorting function for IP addresses
+      if res ~= ip then
+         if shorten_len then
+            res = shortenString(res, shorten_len)
+         else
+            res = shortenString(res)
+         end
+      end
+
+      -- Adding the vlan if requested
+      if show_vlan then
+	 local vlan = tonumber(host_info["vlan"])
+
+	 if vlan and vlan > 0 then
+	    local full_vlan_name = getFullVlanName(vlan, true --[[ Compact --]])
+
+	    res = string.format("%s@%s", res, full_vlan_name)
+	 end
+      end
+
+      return res
+   end
+
+   -- Fallback: just the IP and VLAN
+   return(hostinfo2hostkey(host_info, true))
+end
+
+-- ##############################################
+
+-- Attempt at retrieving an host label from an host_info, using local caches and DNS resolution.
+-- This can be more expensive if compared to only using information found inside host_info.
+local function hostinfo2label_resolved(host_info, show_vlan, shorten_len)
+   local ip = host_info["ip"] or host_info["host"]
+   local res
+
+   -- If local broadcast domain host and DHCP, try to get the label associated
+   -- to the MAC address
+   if host_info["mac"] and (host_info["broadcast_domain_host"] or host_info["dhcpHost"]) then
+      res = getHostAltName(host_info["mac"])
+   end
+
+   if isEmptyString(res) then
+      -- Try and get the resolved name
+      res = string.lower(ntop.getResolvedName(ip))
+
+      if isEmptyString(res) then
+	 -- Nothing found, just fallback to the IP address
+	 res = ip
       end
    end
 
-   return alt_name
+   return label2formattedlabel(res, host_info, show_vlan, shorten_len)
 end
 
 -- ##############################################
@@ -1610,53 +1652,31 @@ end
 -- The following order is used to determine the label:
 --    MAC label (LBD hosts only), IP label, MDNS/DHCP name from C, resolved IP
 --
-function hostinfo2label(host_info, show_vlan)
+-- NOTE: The function attempt at labelling an host only using information found in host_info.
+-- In case host_info is not enough to label the host, then local caches and DNS resolution kick in
+-- to find a label (at the expense of extra time).
+function hostinfo2label(host_info, show_vlan, shorten_len)
    local alt_name = nil
    local ip = host_info["ip"] or host_info["host"]
 
-   -- If local broadcast domain host and DHCP, try to get the label associated
-   -- to the MAC address
-   if host_info["mac"] and (host_info["broadcast_domain_host"] or host_info["dhcpHost"]) then
-      alt_name = getHostAltName(host_info["mac"])
+   -- Take the label as found in the host structure
+   local res = host_info.label
 
-      if not isEmptyString(alt_name) then
-	 -- Adding the vlan if requested
-	 return add_vlan_to_alt_name(alt_name, host_info, show_vlan)
+   if isEmptyString(res) then
+      -- Use any user-configured custom name
+      -- This goes first as a label set by the user MUST take precedance over any other possibly available label
+      res = getHostAltName(ip)
+
+      if isEmptyString(res) then
+	 -- Read what is found inside host `name`, e.g., name as found by dissected traffic such as DHCP
+	 res = host_info["name"]
+
+	 if isEmptyString(res) then
+	    return hostinfo2label_resolved(host_info, show_vlan, shorten_len)
+	 end
       end
    end
-
-   if(host_info.label ~= nil) then
-     alt_name = host_info.label
-   else
-     alt_name = getHostAltName(ip)
-   end
-   
-   if not isEmptyString(alt_name) then
-      alt_name = add_vlan_to_alt_name(alt_name, host_info, show_vlan)
-      
-      if isIPv6(ip) == true then
-	 alt_name = alt_name .. " [IPv6]"
-      end
-
-      -- Adding the vlan if requested
-      return alt_name
-   end
-
-   -- Name info from C (e.g. DHCP name)
-   if not isEmptyString(host_info["name"]) then
-      return add_vlan_to_alt_name(host_info["name"], host_info, show_vlan)      
-   end
-
-   -- Try to get the resolved name
-   local hostname = ntop.getResolvedName(ip)
-   local rname = hostVisualization(ip, hostname, host_info["vlan"])
-
-   if not isEmptyString(rname) then
-      return rname
-   end
-
-   -- Fallback: just the IP and VLAN
-   return(hostinfo2hostkey(host_info))
+   return label2formattedlabel(res, host_info, show_vlan, shorten_len)
 end
 
 -- ##############################################
@@ -1809,15 +1829,17 @@ function hostinfo2detailsurl(host_info, href_params, href_check)
       -- Alerts pages for the host are in alert_stats.lua (Alerts menu)
       if href_params and href_params.page == "engaged-alerts" then
 	 if auth.has_capability(auth.capabilities.alerts) then
-	    res = string.format("%s/lua/alert_stats.lua?page=host&status=engaged&ip=%s,eq",
+	    res = string.format("%s/lua/alert_stats.lua?page=host&status=engaged&ip=%s%s%s",
 				ntop.getHttpPrefix(),
-				hostinfo2hostkey(host_info))
+				hostinfo2hostkey(host_info),
+                                tag_utils.SEPARATOR, "eq")
 	 end
       elseif href_params and href_params.page == "alerts" then
 	 if auth.has_capability(auth.capabilities.alerts) then
-	    res = string.format("%s/lua/alert_stats.lua?page=host&status=historical&ip=%s,eq",
+	    res = string.format("%s/lua/alert_stats.lua?page=host&status=historical&ip=%s%s%s",
 				ntop.getHttpPrefix(),
-				hostinfo2hostkey(host_info))
+				hostinfo2hostkey(host_info),
+                                tag_utils.SEPARATOR, "eq")
 	 end
       -- All other pages are in host_details.lua
       else
@@ -2047,7 +2069,7 @@ function getVlanAlias(vlan_id)
       return alias
    end
 
-   return vlan_id
+   return tostring(vlan_id)
 end
 
 -- ##############################################
@@ -2062,11 +2084,18 @@ end
 
 -- ##############################################
 
-function getFullVlanName(vlan_id)
+function getFullVlanName(vlan_id, compact)
    local alias = getVlanAlias(vlan_id)
 
-   if (tostring(alias)) ~= (tostring(vlan_id)) then
-      return string.format("%s [%s]", alias, vlan_id)
+   if not isEmptyString(alias) then
+      if not isEmptyString(alias) and alias ~= tostring(vlan_id) then
+	 if compact then
+	    alias = shortenString(alias)
+	    return string.format("%s", alias)
+	 else
+	    return string.format("%u [%s]", vlan_id, alias)
+	 end
+      end
    end
 
    return vlan_id
@@ -2141,7 +2170,6 @@ function hostinfo2hostkey(host_info, host_type, show_vlan)
    end
 
    local vlan_id = tonumber(host_info["vlan"] or host_info["vlan_id"] or 0)
-
 
    if vlan_id ~= 0 or show_vlan then
       rsp = rsp..'@'..tostring(vlan_id)
@@ -2639,7 +2667,7 @@ end
 
  -- ##############################################
 
-function haveAdminPrivileges(isJsonResponse)
+function isAdministratorOrPrintErr(isJsonResponse)
 
    if (isAdministrator()) then
       return(true)
@@ -2976,34 +3004,6 @@ end
 
 -- ###############################################
 
-function formatElephantAlertType(flowalert_info)
-   local threshold = ""
-   local res = ""
-
-   if not flowalert_info then
-      return i18n("flow_details.elephant_flow")
-   end
-
-   local l2r_bytes = bytesToSize(flowalert_info["l2r_bytes"])
-
-   if flowalert_info["l2r_bytes"] > flowalert_info["l2r_threshold"] and flowalert_info["l2r_threshold"] > 0 then
-      l2r_bytes = l2r_bytes .." > "..bytesToSize(flowalert_info["l2r_threshold"])
-   end
-
-   local r2l_bytes = bytesToSize(flowalert_info["r2l_bytes"])
-   if flowalert_info["r2l_bytes"] > flowalert_info["r2l_threshold"] and flowalert_info["l2r_threshold"] > 0 then
-      r2l_bytes = r2l_bytes .. " > "..bytesToSize(flowalert_info["r2l_threshold"])
-   end
-
-   res = i18n("flow_details.elephant_flow")
-   res = string.format("%s<sup><i class='fas fa-info-circle' aria-hidden='true' title='"..i18n("flow_details.elephant_flow_descr").."'></i></sup>", res)
-   res = string.format("%s %s", res, i18n("flow_details.elephant_exceeded", {l2r = l2r_bytes, r2l = r2l_bytes}))
-
-   return res
-end
-
--- ###############################################
-
 -- prints purged information for hosts / flows
 function purgedErrorString()
     local info = ntop.getInfo(false)
@@ -3012,14 +3012,14 @@ end
 
 -- print TCP flags
 function printTCPFlags(flags)
-   if(hasbit(flags,0x01)) then print('<span class="badge bg-info">FIN</span> ') end
-   if(hasbit(flags,0x02)) then print('<span class="badge bg-info">SYN</span> ')  end
+   if(hasbit(flags,0x01)) then print('<span class="badge bg-warning">FIN</span> ') end
+   if(hasbit(flags,0x02)) then print('<span class="badge bg-warning">SYN</span> ')  end
    if(hasbit(flags,0x04)) then print('<span class="badge bg-danger">RST</span> ') end
-   if(hasbit(flags,0x08)) then print('<span class="badge bg-info">PUSH</span> ') end
-   if(hasbit(flags,0x10)) then print('<span class="badge bg-info">ACK</span> ')  end
-   if(hasbit(flags,0x20)) then print('<span class="badge bg-info">URG</span> ')  end
-   if(hasbit(flags,0x40)) then print('<span class="badge bg-info">ECE</span> ')  end
-   if(hasbit(flags,0x80)) then print('<span class="badge bg-info">CWR</span> ')  end
+   if(hasbit(flags,0x08)) then print('<span class="badge bg-warning">PUSH</span> ') end
+   if(hasbit(flags,0x10)) then print('<span class="badge bg-warning">ACK</span> ')  end
+   if(hasbit(flags,0x20)) then print('<span class="badge bg-warning">URG</span> ')  end
+   if(hasbit(flags,0x40)) then print('<span class="badge bg-warning">ECE</span> ')  end
+   if(hasbit(flags,0x80)) then print('<span class="badge bg-warning">CWR</span> ')  end
 end
 
 -- convert the integer carrying TCP flags in a more convenient lua table
@@ -4070,6 +4070,11 @@ end
 --- @return string message If there is a new major release then return a non-nil string
 --- containing the update message.
 function check_latest_major_release()
+
+   if ntop.isOffline() then
+      return nil
+   end
+
    -- get the latest major release
    local latest_version = ntop.getCache("ntopng.cache.major_release")
 
@@ -4089,7 +4094,6 @@ function check_latest_major_release()
    end
 
    return get_version_update_msg(info, latest_version)
-
 end
 
 -- ###########################################
@@ -4339,7 +4343,65 @@ end
 -- #####################
 
 function formatAlertAHref(key, value, label)
-   return "<a class='tag-filter' data-tag-key='" .. key .. "' data-tag-value='" .. value .. "' data-tag-label='" .. label .. "' href='#'>" .. label .. "</a>"
+   return "<a class='tag-filter' data-tag-key='" .. key .. "' title='" .. value .. "' data-tag-value='" .. value .. "' data-tag-label='" .. label .. "' href='#'>" .. label .. "</a>"
+end
+
+-- ##############################################
+
+function getObsPointAliasKey()
+   return "ntopng.observation_point_aliases"
+end
+
+-- ##############################################
+
+function getObsPointAlias(observation_point_id, add_id, add_href)
+   local alias = ntop.getHashCache(getObsPointAliasKey(), observation_point_id)
+   local ret
+   
+   if not isEmptyString(alias) then
+      if(add_id == true) then
+	 ret = observation_point_id .. " [".. alias .."]"
+      else
+	 ret = alias
+      end
+   else
+      ret = tostring(observation_point_id)
+   end
+
+   if(add_href == true) then
+      ret = "<A HREF=\"".. ntop.getHttpPrefix() .."/lua/pro/enterprise/observation_points.lua\">"..ret.."</A>"
+   end
+
+   return ret
+end
+
+-- ##############################################
+
+function setObsPointAlias(observation_point_id, alias)
+   if((observation_point_id ~= alias) and not isEmptyString(alias)) then
+      ntop.setHashCache(getObsPointAliasKey(), observation_point_id, alias)
+   else
+      ntop.delHashCache(getObsPointAliasKey(), observation_point_id)
+   end
+end
+
+-- ##############################################
+
+function getFullObsPointName(observation_point_id, compact, add_id)
+   local alias = getObsPointAlias(observation_point_id, add_id)
+
+   if not isEmptyString(observation_point_id) then
+      if not isEmptyString(observation_point_id) and alias ~= tostring(observation_point_id) then
+    if compact then
+       alias = shortenString(alias)
+       return string.format("%s", alias)
+    else
+       return string.format("%u [%s]", observation_point_id, alias)
+    end
+      end
+   end
+
+   return observation_point_id
 end
 
 -- #####################

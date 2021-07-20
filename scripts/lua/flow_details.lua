@@ -15,6 +15,7 @@ local alert_consts = require "alert_consts"
 local alert_utils = require "alert_utils"
 local alert_entities = require "alert_entities"
 local dscp_consts = require "dscp_consts"
+local tag_utils = require "tag_utils"
 require "flow_utils"
 
 if ntop.isPro() then
@@ -884,7 +885,7 @@ else
 	 print("<td>&nbsp;</td></tr>\n")
       end
 
-      print("<tr><td nowrap>" .. i18n("client") .. " <i class=\"fas fa-arrow-right\"></i> " .. i18n("server") .. ": <span id=cli2srv>" .. formatPackets(flow["cli2srv.packets"]) .. " / ".. bytesToSize(flow["cli2srv.bytes"]) .. "</span> <span id=sent_trend></span></td><td nowrap>" .. i18n("client") .. " <i class=\"fas fa-arrow-left\"></i> " .. i18n("server") .. ": <span id=srv2cli>" .. formatPackets(flow["srv2cli.packets"]) .. " / ".. bytesToSize(flow["srv2cli.bytes"]) .. "</span> <span id=rcvd_trend></span></td></tr>\n")
+      print("<tr><td nowrap>" .. i18n("client") .. " <i class=\"fas fa-long-arrow-alt-right\"></i> " .. i18n("server") .. ": <span id=cli2srv>" .. formatPackets(flow["cli2srv.packets"]) .. " / ".. bytesToSize(flow["cli2srv.bytes"]) .. "</span> <span id=sent_trend></span></td><td nowrap>" .. i18n("client") .. " <i class=\"fas fa-long-arrow-alt-left\"></i> " .. i18n("server") .. ": <span id=srv2cli>" .. formatPackets(flow["srv2cli.packets"]) .. " / ".. bytesToSize(flow["srv2cli.bytes"]) .. "</span> <span id=rcvd_trend></span></td></tr>\n")
 
       print("<tr><td colspan=2>")
       cli2srv = round((flow["cli2srv.bytes"] * 100) / flow["bytes"], 0)
@@ -896,7 +897,7 @@ else
 	 cli_name = cli_name .. ":" .. flow["cli.port"]
 	 srv_name = srv_name .. ":" .. flow["srv.port"]
       end
-      print('<div class="progress"><div class="progress-bar bg-warning" style="width: ' .. cli2srv.. '%;">'.. cli_name..'</div><div class="progress-bar bg-info" style="width: ' .. (100-cli2srv) .. '%;">' .. srv_name .. '</div></div>')
+      print('<div class="progress"><div class="progress-bar bg-warning" style="width: ' .. cli2srv.. '%;">'.. cli_name..'</div><div class="progress-bar bg-success" style="width: ' .. (100-cli2srv) .. '%;">' .. srv_name .. '</div></div>')
       print("</td></tr>\n")
    end
 
@@ -939,7 +940,7 @@ else
 	 if(keys[1] == keys[2]) then
 	    key = key ..' <i class="fas fa-exchange-alt"></i> '
 	 else
-	    key = key ..' <i class="fas fa-arrow-right"></i> '
+	    key = key ..' <i class="fas fa-long-arrow-alt-right"></i> '
 	 end
 
 	 key = key .. iec104_typeids2str(tonumber(keys[2]))
@@ -978,12 +979,12 @@ else
       
       print('<div class="progress"><div class="progress-bar bg-warning" style="width: ' .. pctg .. '%;">'..pctg..'% </div>')
       pctg = 100-pctg
-      print('<div class="progress-bar bg-info" style="width: ' .. pctg .. '%;">'..pctg..'% </div></div>')
+      print('<div class="progress-bar bg-success" style="width: ' .. pctg .. '%;">'..pctg..'% </div></div>')
       -- print(formatValue(flow.iec104.stats.forward_msgs).." RX / "..formatValue(flow.iec104.stats.reverse_msgs).." TX")
       print("</td></tr>\n")
 
       print("<tr><th>"..i18n("flow_details.iec104_msg_loss").."</th><td>")
-      print("<i class=\"fas fa-arrow-left\"></i> "..colorNotZero(flow.iec104.pkt_lost.rx)..", <i class=\"fas fa-arrow-right\"></i> "..colorNotZero(flow.iec104.pkt_lost.tx).." / ")
+      print("<i class=\"fas fa-long-arrow-alt-left\"></i> "..colorNotZero(flow.iec104.pkt_lost.rx)..", <i class=\"fas fa-long-arrow-alt-right\"></i> "..colorNotZero(flow.iec104.pkt_lost.tx).." / ")
 
       if(flow.iec104.stats.retransmitted_msgs == 0) then
 	 print("0")
@@ -1008,7 +1009,7 @@ else
 
 	 print("<tr><th width=30%>"..i18n("flow_details.rtt_breakdown").."</th><td colspan=2>")
 	 print('<div class="progress"><div class="progress-bar bg-warning" style="width: ' .. (cli2srv * 100 / rtt) .. '%;">'.. cli2srv ..' ms (client)</div>')
-	 print('<div class="progress-bar bg-info" style="width: ' .. (srv2cli * 100 / rtt) .. '%;">' .. srv2cli .. ' ms (server)</div></div>')
+	 print('<div class="progress-bar bg-success" style="width: ' .. (srv2cli * 100 / rtt) .. '%;">' .. srv2cli .. ' ms (server)</div></div>')
 	 print("</td></tr>\n")
 
 	 c = interface.getAddressInfo(flow["cli.ip"])
@@ -1038,13 +1039,13 @@ else
       if flow["cli2srv.packets"] > 1 and flow["interarrival.cli2srv"] and flow["interarrival.cli2srv"]["max"] > 0 then
 	 print("<tr><th width=30%")
 	 if(flow["flow.idle"] == true) then print(" rowspan=2") end
-	 print(">"..i18n("flow_details.packet_inter_arrival_time").."</th><td nowrap>"..i18n("client").." <i class=\"fas fa-arrow-right\"></i> "..i18n("server")..": ")
+	 print(">"..i18n("flow_details.packet_inter_arrival_time").."</th><td nowrap>"..i18n("client").." <i class=\"fas fa-long-arrow-alt-right\"></i> "..i18n("server")..": ")
 	 print(msToTime(flow["interarrival.cli2srv"]["min"]).." / "..msToTime(flow["interarrival.cli2srv"]["avg"]).." / "..msToTime(flow["interarrival.cli2srv"]["max"]))
 	 print("</td>\n")
 	 if(flow["srv2cli.packets"] < 2) then
 	    print("<td>&nbsp;")
 	 else
-	    print("<td nowrap>"..i18n("client").." <i class=\"fas fa-arrow-left\"></i> "..i18n("server")..": ")
+	    print("<td nowrap>"..i18n("client").." <i class=\"fas fa-long-arrow-alt-left\"></i> "..i18n("server")..": ")
 	    print(msToTime(flow["interarrival.srv2cli"]["min"]).." / "..msToTime(flow["interarrival.srv2cli"]["avg"]).." / "..msToTime(flow["interarrival.srv2cli"]["max"]))
 	 end
 	 print("</td></tr>\n")
@@ -1054,7 +1055,7 @@ else
       if((flow["cli2srv.fragments"] + flow["srv2cli.fragments"]) > 0) then
 	 rowspan = 2
 	 print("<tr><th width=30% rowspan="..rowspan..">"..i18n("flow_details.ip_packet_analysis").."</th>")
-	 print("<th>&nbsp;</th><th>"..i18n("client").." <i class=\"fas fa-arrow-right\"></i> "..i18n("server").." / "..i18n("client").." <i class=\"fas fa-arrow-left\"></i> "..i18n("server").."</th></tr>\n")
+	 print("<th>&nbsp;</th><th>"..i18n("client").." <i class=\"fas fa-long-arrow-alt-right\"></i> "..i18n("server").." / "..i18n("client").." <i class=\"fas fa-long-arrow-alt-left\"></i> "..i18n("server").."</th></tr>\n")
 	 print("<tr><th>"..i18n("details.fragments").."</th><td align=right><span id=c2sFrag>".. formatPackets(flow["cli2srv.fragments"]) .."</span> / <span id=s2cFrag>".. formatPackets(flow["srv2cli.fragments"]) .."</span></td></tr>\n")
       end
 
@@ -1067,7 +1068,7 @@ else
 
 	 if rowspan > 1 then
 	    print("<tr><th width=30% rowspan="..rowspan..">"..i18n("flow_details.tcp_packet_analysis").."</th>")
-	    print("<th></th><th>"..i18n("client").." <i class=\"fas fa-arrow-right\"></i> "..i18n("server").." / "..i18n("client").." <i class=\"fas fa-arrow-left\"></i> "..i18n("server").."</th></tr>\n")
+	    print("<th></th><th>"..i18n("client").." <i class=\"fas fa-long-arrow-alt-right\"></i> "..i18n("server").." / "..i18n("client").." <i class=\"fas fa-long-arrow-alt-left\"></i> "..i18n("server").."</th></tr>\n")
 
 	    if((flow["cli2srv.retransmissions"] + flow["srv2cli.retransmissions"]) > 0) then
 	       print("<tr><th>"..i18n("details.retransmissions").."</th><td align=right><span id=c2sretr>".. formatPackets(flow["cli2srv.retransmissions"]) .."</span> / <span id=s2cretr>".. formatPackets(flow["srv2cli.retransmissions"]) .."</span></td></tr>\n")
@@ -1165,17 +1166,17 @@ else
    if((flow["tcp.max_thpt.cli2srv"] ~= nil) and (flow["tcp.max_thpt.cli2srv"] > 0)) then
      print("<tr><th width=30%>"..
      '<a href="https://en.wikipedia.org/wiki/TCP_tuning" data-bs-toggle="tooltip" target=\"_blank\" title="'..i18n("flow_details.computed_as_tcp_window_size_rtt")..'">'..
-     i18n("flow_details.max_estimated_tcp_throughput").."</a> <i class=\"fas fa-external-link-alt\"></i><td nowrap> "..i18n("client").." <i class=\"fas fa-arrow-right\"></i> "..i18n("server")..": ")
+     i18n("flow_details.max_estimated_tcp_throughput").."</a> <i class=\"fas fa-external-link-alt\"></i><td nowrap> "..i18n("client").." <i class=\"fas fa-long-arrow-alt-right\"></i> "..i18n("server")..": ")
      print(bitsToSize(flow["tcp.max_thpt.cli2srv"]))
-     print("</td><td> "..i18n("client").." <i class=\"fas fa-arrow-left\"></i> "..i18n("server")..": ")
+     print("</td><td> "..i18n("client").." <i class=\"fas fa-long-arrow-alt-left\"></i> "..i18n("server")..": ")
      print(bitsToSize(flow["tcp.max_thpt.srv2cli"]))
      print("</td></tr>\n")
    end
 
    if((flow["cli2srv.trend"] ~= nil) and false) then
-     print("<tr><th width=30%>"..i18n("flow_details.throughput_trend").."</th><td nowrap>"..flow["cli.ip"].." <i class=\"fas fa-arrow-right\"></i> "..flow["srv.ip"]..": ")
+     print("<tr><th width=30%>"..i18n("flow_details.throughput_trend").."</th><td nowrap>"..flow["cli.ip"].." <i class=\"fas fa-long-arrow-alt-right\"></i> "..flow["srv.ip"]..": ")
      print(flow["cli2srv.trend"])
-     print("</td><td>"..flow["cli.ip"].." <i class=\"fas fa-arrow-left\"></i> "..flow["srv.ip"]..": ")
+     print("</td><td>"..flow["cli.ip"].." <i class=\"fas fa-long-arrow-alt-left\"></i> "..flow["srv.ip"]..": ")
      print(flow["srv2cli.trend"])
      print("</td></tr>\n")
     end
@@ -1183,9 +1184,9 @@ else
    local flags = flow["cli2srv.tcp_flags"] or flow["srv2cli.tcp_flags"]
 
    if((flags ~= nil) and (flags > 0)) then
-      print("<tr><th width=30% rowspan=2>"..i18n("tcp_flags").."</th><td nowrap>"..i18n("client").." <i class=\"fas fa-arrow-right\"></i> "..i18n("server")..": ")
+      print("<tr><th width=30% rowspan=2>"..i18n("tcp_flags").."</th><td nowrap>"..i18n("client").." <i class=\"fas fa-long-arrow-alt-right\"></i> "..i18n("server")..": ")
       printTCPFlags(flow["cli2srv.tcp_flags"])
-      print("</td><td nowrap>"..i18n("client").." <i class=\"fas fa-arrow-left\"></i> "..i18n("server")..": ")
+      print("</td><td nowrap>"..i18n("client").." <i class=\"fas fa-long-arrow-alt-left\"></i> "..i18n("server")..": ")
       printTCPFlags(flow["srv2cli.tcp_flags"])
       print("</td></tr>\n")
 
@@ -1261,7 +1262,7 @@ else
       score_category_security = 100 - score_category_network
 
       print('<td><div class="progress"><div class="progress-bar bg-warning" style="width: '..score_category_network..'%;">'.. i18n("flow_details.score_category_network"))
-      print('</div><div class="progress-bar bg-info" style="width: ' .. score_category_security .. '%;">' .. i18n("flow_details.score_category_security") .. '</div></div></td>\n')
+      print('</div><div class="progress-bar bg-success" style="width: ' .. score_category_security .. '%;">' .. i18n("flow_details.score_category_security") .. '</div></div></td>\n')
       print("</tr>\n")
    end
 
@@ -1317,6 +1318,16 @@ else
 
    -- Print flow alerts (ordered by score and then alphabetically)
    if num_statuses > 0 then
+      -- Prepare a mapping between alert id and check
+      local alert_id_to_flow_check = {}
+      local checks = require "checks"
+      local flow_checks = checks.load(ifId, checks.script_types.flow, "flow")
+      for flow_check_name, flow_check in pairs(flow_checks.modules) do
+	 if flow_check.alert_id then
+	    alert_id_to_flow_check[flow_check.alert_id] = flow_check_name
+	 end
+      end
+
       for _, score_alerts in pairsByKeys(alerts_by_score, rev) do
 	 for _, score_alert in pairsByField(score_alerts, "message", asc) do
 	    if first then
@@ -1329,7 +1340,39 @@ else
 	    print(string.format('<td>%s %s</td>', score_alert.message, score_alert.is_predominant and status_icon or ''))
 
 	    if score_alert.alert_id then
-	       print(string.format('<td><a href="#alerts_filter_dialog" alert_id=%u alert_label="%s" class="btn btn-sm btn-warning" role="button"><i class="fas fa-bell-slash"></i></a></td>', score_alert.alert_id, score_alert.alert_label))
+	       print('<td>')
+
+	       -- Add rules to disable the check
+	       print(string.format('<a href="#alerts_filter_dialog" alert_id=%u alert_label="%s" class="btn btn-sm btn-warning" role="button"><i class="fas fa-bell-slash"></i></a>', score_alert.alert_id, score_alert.alert_label))
+
+	       -- If available, add a cog to configure the check
+	       if alert_id_to_flow_check[score_alert.alert_id] then
+		  print(string.format('&nbsp;<a href="%s" class="btn btn-sm btn-info" role="button"><i class="fas fa-cog"></i></a>', alert_utils.getConfigsetURL(alert_id_to_flow_check[score_alert.alert_id], "flow")))
+	       end
+
+	       -- For the predominant alert, add an anchor to the historical alert
+	       if not ifstats.isViewed and score_alert.is_predominant then
+		  -- Prepare bounds for the historical alert search.
+		  local epoch_begin = flow["seen.first"]
+		  -- As this is the page of active flows, it is meaningful to use the current time for the epoch end.
+		  -- This will also enable multiple flows with the same tuple to be shown.
+		  local epoch_end = os.time()
+		  local l7_proto = flow["proto.ndpi_id"] .. tag_utils.SEPARATOR .. "eq"
+		  local cli_ip = flow["cli.ip"]  .. tag_utils.SEPARATOR .. "eq"
+		  local srv_ip = flow["srv.ip"]  .. tag_utils.SEPARATOR .. "eq"
+		  local cli_port = flow["cli.port"]  .. tag_utils.SEPARATOR .. "eq"
+		  local srv_port = flow["srv.port"]  .. tag_utils.SEPARATOR .. "eq"
+
+		  print(string.format('&nbsp;<a href="%s/lua/alert_stats.lua?status=historical&page=flow&epoch_begin=%u&epoch_end=%u&l7_proto=%s&cli_ip=%s&cli_port=%s&srv_ip=%s&srv_port=%s" class="btn btn-sm btn-info" role="button"><i class="fas fa-exclamation-triangle"></i></a>',
+				      ntop.getHttpPrefix(),
+				      epoch_begin,
+				      epoch_end,
+				      l7_proto,
+				      cli_ip, cli_port,
+				      srv_ip, srv_port))
+	       end
+
+	       print('</td>')
 	    else -- These are unhandled alerts, e.g., flow risks for which a check doesn't exist
 	       print(string.format('<td></td>'))
 	    end
@@ -1343,8 +1386,8 @@ else
 
    if(flow.entropy and flow.entropy.client and flow.entropy.server) then
       print("<tr><th width=30%><A HREF=\"https://en.wikipedia.org/wiki/Entropy_(information_theory)\" target=\"_blank\">"..i18n("flow_details.entropy").."</A> <i class=\"fas fa-external-link-alt\"></i></th>")
-      print("<td>"..i18n("client").." <i class=\"fas fa-arrow-right\"></i> "..i18n("server")..": ".. string.format("%.3f", flow.entropy.client) .. "</td>")
-      print("<td>"..i18n("client").." <i class=\"fas fa-arrow-left\"></i> "..i18n("server")..": ".. string.format("%.3f", flow.entropy.server) .. "</td>")
+      print("<td>"..i18n("client").." <i class=\"fas fa-long-arrow-alt-right\"></i> "..i18n("server")..": ".. string.format("%.3f", flow.entropy.client) .. "</td>")
+      print("<td>"..i18n("client").." <i class=\"fas fa-long-arrow-alt-left\"></i> "..i18n("server")..": ".. string.format("%.3f", flow.entropy.server) .. "</td>")
       print("</tr>\n")
    end
 
@@ -1479,7 +1522,7 @@ else
       print("<tr><th width=30%><A HREF=\"".. ntop.getHttpPrefix() .."/lua/pro/admin/edit_profiles.lua\">"..i18n("flow_details.profile_name").."</A></th><td colspan=2><span class='badge bg-primary'>"..flow["profile"].."</span></td></tr>\n")
    end
 
-   if(flow.src_as or flow.dst_as) then
+   if(flow.src_as and flow.src_as ~= 0) or (flow.dst_as and flow.dst_as ~= 0) then
       local asn
       
       print("<tr>")
@@ -1544,19 +1587,26 @@ else
       info = removeProtocolFields("RTP",info)
 
       local snmpdevice = nil
+
       if(ntop.isPro() and not isEmptyString(syminfo["EXPORTER_IPV4_ADDRESS"])) then
 	 snmpdevice = syminfo["EXPORTER_IPV4_ADDRESS"]
       elseif(ntop.isPro() and not isEmptyString(syminfo["NPROBE_IPV4_ADDRESS"])) then
 	 snmpdevice = syminfo["NPROBE_IPV4_ADDRESS"]
       end
 
-      if(flow["observation_point_id"] ~= nil) then
+      if((flow["observation_point_id"] ~= nil) and (flow["observation_point_id"] ~= 0)) then
+	 local custom_name = getObsPointAlias(flow["observation_point_id"], true, true)
+
 	 print("<tr><th>"..i18n("details.observation_point_id").."</th>")
-	 print("<td colspan=\"2\">"..flow["observation_point_id"].."</td></tr>")
+	 print("<td colspan=\"2\">"..custom_name.."</td></tr>")
       end
       
-      if flow["in_index"] or flow["out_index"] then
-	 printFlowSNMPInfo(snmpdevice, flow["in_index"], flow["out_index"])
+      if(flow["in_index"] or flow["out_index"]) then
+	 if((flow["in_index"] == flow["out_index"]) and (flow["in_index"] == 0)) then
+	    -- nothing to do (they are likely to be not initialized)
+	 else
+	    printFlowSNMPInfo(snmpdevice, flow["in_index"], flow["out_index"])
+	 end
       end
       
       local num = 0
@@ -1613,7 +1663,7 @@ print [[
         const $disableAlert = $('#alerts_filter_dialog form').modalHandler({
             method: 'post',
             csrf: "]] print(ntop.getRandomCSRFValue()) print[[",
-            endpoint: `${http_prefix}/lua/rest/v1/edit/check/filter.lua`,
+            endpoint: `${http_prefix}/lua/rest/v2/edit/check/filter.lua`,
             beforeSumbit: function (alert) {
                 const data = {
                     alert_key: alert.alert_id,
